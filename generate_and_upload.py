@@ -1,76 +1,91 @@
+import os
 import cv2
 import numpy as np
 from gtts import gTTS
-import os
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+import subprocess
+import google.auth.transport.requests
 from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
-# ---------------------------
-# 1. Video generation
-# ---------------------------
-WIDTH, HEIGHT = 720, 480
-DURATION = 10  # seconds
+# -----------------------------
+# Settings
+# -----------------------------
+WIDTH, HEIGHT = 720, 1280   # Vertical 9:16
 FPS = 24
-TEXT = "Hello! This is a test YouTube Short."
+VIDEO_FILENAME = "video.mp4"
+AUDIO_FILENAME = "audio.mp3"
+FINAL_FILENAME = "short_final.mp4"
+TEXT = "This is a 10 second test short video generated automatically!"
+DURATION = 10
 
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-video_file = "video.mp4"
-out = cv2.VideoWriter(video_file, fourcc, FPS, (WIDTH, HEIGHT))
+# -----------------------------
+# Step 1: Generate video with text
+# -----------------------------
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-for i in range(DURATION * FPS):
-    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-    cv2.putText(frame, TEXT, (50, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    out.write(frame)
+font = cv2.FONT_HERSHEY_SIMPLEX
+font_scale = 1.2
+thickness = 2
+color = (255, 255, 255)
 
-out.release()
+(text_w, text_h), _ = cv2.getTextSize(TEXT, font, font_scale, thickness)
+pos = (WIDTH // 2 - text_w // 2, HEIGHT // 2)
 
-# ---------------------------
-# 2. Text-to-speech
-# ---------------------------
-audio_file = "audio.mp3"
+frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+cv2.putText(frame, TEXT, pos, font, font_scale, color, thickness, cv2.LINE_AA)
+
+for _ in range(DURATION * FPS):
+    video.write(frame)
+
+video.release()
+
+# -----------------------------
+# Step 2: Generate TTS audio
+# -----------------------------
 tts = gTTS(TEXT)
-tts.save(audio_file)
+tts.save(AUDIO_FILENAME)
 
-# ---------------------------
-# 3. Merge audio with video
-# ---------------------------
-final_file = "short_final.mp4"
-os.system(f"ffmpeg -y -i {video_file} -i {audio_file} -c:v copy -c:a aac -shortest {final_file}")
+# -----------------------------
+# Step 3: Merge video + audio
+# -----------------------------
+subprocess.run([
+    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
+    "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
+], check=True)
 
-# ---------------------------
-# 4. Upload to YouTube
-# ---------------------------
-CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
-CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
-REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
+# -----------------------------
+# Step 4: Upload to YouTube
+# -----------------------------
+CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
+CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
+REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
 creds = Credentials(
     None,
     refresh_token=REFRESH_TOKEN,
+    token_uri="https://oauth2.googleapis.com/token",
     client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    token_uri="https://oauth2.googleapis.com/token"
+    client_secret=CLIENT_SECRET
 )
-
+creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
 request = youtube.videos().insert(
     part="snippet,status",
     body={
         "snippet": {
-            "title": "Test YouTube Short",
-            "description": "This is an automatically generated test short.",
-            "tags": ["test", "short", "automation"],
+            "title": "Test Auto Short #Shorts",
+            "description": "This is a test short generated automatically. #Shorts",
+            "tags": ["Shorts", "Automation", "YouTube API"],
             "categoryId": "22"
         },
         "status": {
-            "privacyStatus": "private",
-            "selfDeclaredMadeForKids": False
+            "privacyStatus": "public"
         }
     },
-    media_body=MediaFileUpload(final_file)
+    media_body=FINAL_FILENAME
 )
-
 response = request.execute()
-print("✅ Uploaded Video ID:", response["id"])
+
+print(f"✅ Uploaded as Short! Video ID: {response['id']}")
