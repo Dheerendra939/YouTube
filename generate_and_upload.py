@@ -1,54 +1,81 @@
-import os
-from moviepy.editor import ColorClip, concatenate_videoclips
-from moviepy.audio.io.AudioFileClip import AudioFileClip
-from moviepy.editor import AudioClip
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google.oauth2.credentials import Credentials
+# generate_and_upload.py
+
+import cv2
+import numpy as np
 from gtts import gTTS
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+import os
 
-# -----------------------------
-# CONFIG
-# -----------------------------
-REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
-CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
-CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
-ACCESS_TOKEN = os.environ.get("YOUTUBE_ACCESS_TOKEN")  # optional, auto-refresh
+# ----------------------------
+# YouTube API Credentials
+# ----------------------------
+ACCESS_TOKEN = os.getenv("YOUTUBE_ACCESS_TOKEN")
+REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
+CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
 
-VIDEO_TITLE = "Test Short"
-VIDEO_DESC = "This is a 10-second test short generated automatically."
-VIDEO_TAGS = ["test", "short", "github-actions"]
-VIDEO_FILENAME = "output.mp4"
+# ----------------------------
+# Video settings
+# ----------------------------
+VIDEO_FILENAME = "short_video.mp4"
 AUDIO_FILENAME = "audio.mp3"
+WIDTH, HEIGHT = 720, 480
+FPS = 24
+DURATION = 10  # seconds
 
-TEXT_TO_SPEAK = "Hello! This is a test short generated automatically by GitHub Actions."
+TEXT = "Hello! This is a test Short from GitHub Actions."  # Text to display
 
-# -----------------------------
-# CREATE AUDIO
-# -----------------------------
-tts = gTTS(text=TEXT_TO_SPEAK, lang='en')
+# ----------------------------
+# Step 1: Generate audio
+# ----------------------------
+tts = gTTS(TEXT)
 tts.save(AUDIO_FILENAME)
 
-# Load audio to get duration
-audio_clip = AudioFileClip(AUDIO_FILENAME)
-duration = audio_clip.duration
+# ----------------------------
+# Step 2: Generate video frames
+# ----------------------------
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-# -----------------------------
-# CREATE VIDEO
-# -----------------------------
-# Create simple color clip with the same duration as audio
-video_clip = ColorClip(size=(720, 480), color=(0, 0, 0), duration=duration)
+for i in range(FPS * DURATION):
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    # Background color
+    frame[:] = (50, 50, 200)
+    
+    # Put text in the center
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1
+    color = (255, 255, 255)
+    thickness = 2
+    text_size = cv2.getTextSize(TEXT, font, font_scale, thickness)[0]
+    text_x = (WIDTH - text_size[0]) // 2
+    text_y = (HEIGHT + text_size[1]) // 2
+    cv2.putText(frame, TEXT, (text_x, text_y), font, font_scale, color, thickness, cv2.LINE_AA)
+    
+    video.write(frame)
 
-# Add audio
-video_clip = video_clip.set_audio(audio_clip)
+video.release()
 
-# Write video file
-video_clip.write_videofile(VIDEO_FILENAME, fps=24, codec="libx264", audio_codec="aac")
+# ----------------------------
+# Step 3: Combine audio + video using ffmpeg
+# ----------------------------
+import subprocess
+final_video = "final_short.mp4"
+subprocess.run([
+    "ffmpeg", "-y",
+    "-i", VIDEO_FILENAME,
+    "-i", AUDIO_FILENAME,
+    "-c:v", "copy",
+    "-c:a", "aac",
+    "-shortest",
+    final_video
+])
 
-# -----------------------------
-# UPLOAD TO YOUTUBE
-# -----------------------------
-# Set up credentials
+# ----------------------------
+# Step 4: Upload to YouTube
+# ----------------------------
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 creds = Credentials(
     token=ACCESS_TOKEN,
     refresh_token=REFRESH_TOKEN,
@@ -57,126 +84,23 @@ creds = Credentials(
     token_uri="https://oauth2.googleapis.com/token"
 )
 
-youtube = build('youtube', 'v3', credentials=creds)
-
-# Prepare upload
-request_body = {
-    "snippet": {
-        "title": VIDEO_TITLE,
-        "description": VIDEO_DESC,
-        "tags": VIDEO_TAGS,
-        "categoryId": "22"  # People & Blogs
-    },
-    "status": {
-        "privacyStatus": "public",
-        "selfDeclaredMadeForKids": False
-    }
-}
-
-media = MediaFileUpload(VIDEO_FILENAME)
+youtube = build("youtube", "v3", credentials=creds)
 
 request = youtube.videos().insert(
     part="snippet,status",
-    body=request_body,
-    media_body=media
-)
-response = request.execute()
-
-print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
-    refresh_token=REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    scopes=["https://www.googleapis.com/auth/youtube.upload"]
-)
-
-youtube = build("youtube", "v3", credentials=creds)
-
-title = f"Test Short {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-request_body = {
-    "snippet": {
-        "title": title,
-        "description": "This is an auto-uploaded test short.",
-        "tags": ["test", "shorts", "automation"],
-        "categoryId": "22"
+    body={
+        "snippet": {
+            "title": "Test Short from GitHub Actions",
+            "description": "This is a test Short uploaded automatically via GitHub Actions.",
+            "tags": ["test", "github actions", "youtube short"],
+            "categoryId": "22"  # People & Blogs
+        },
+        "status": {
+            "privacyStatus": "private"
+        }
     },
-    "status": {"privacyStatus": "unlisted"}
-}
-
-media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
-request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
-response = request.execute()
-
-print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
-    refresh_token=REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    scopes=["https://www.googleapis.com/auth/youtube.upload"]
+    media_body=final_video
 )
 
-youtube = build("youtube", "v3", credentials=creds)
-
-title = f"Test Short {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-request_body = {
-    "snippet": {
-        "title": title,
-        "description": "This is an auto-uploaded test short.",
-        "tags": ["test", "shorts", "automation"],
-        "categoryId": "22"
-    },
-    "status": {"privacyStatus": "unlisted"}
-}
-
-media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
-request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
 response = request.execute()
-
-print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
-    refresh_token=REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    scopes=["https://www.googleapis.com/auth/youtube.upload"],
-)
-
-youtube = build("youtube", "v3", credentials=creds)
-
-title = f"Test Short {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-request_body = {
-    "snippet": {
-        "title": title,
-        "description": "This is an auto-uploaded test short.",
-        "tags": ["test", "shorts", "automation"],
-        "categoryId": "22",
-    },
-    "status": {"privacyStatus": "unlisted"},
-}
-
-media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
-request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
-response = request.execute()
-
-print("✅ Uploaded successfully! Video ID:", response.get("id"))    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    scopes=["https://www.googleapis.com/auth/youtube.upload"],
-)
-
-youtube = build("youtube", "v3", credentials=creds)
-
-title = f"Test Short {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-request_body = {
-    "snippet": {
-        "title": title,
-        "description": "This is an auto-uploaded test short.",
-        "tags": ["test", "shorts", "automation"],
-        "categoryId": "22",
-    },
-    "status": {"privacyStatus": "unlisted"},
-}
-
-media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
-request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
-response = request.execute()
-
-print("✅ Uploaded successfully! Video ID:", response.get("id"))
+print("✅ Video uploaded successfully! Video ID:", response["id"])
