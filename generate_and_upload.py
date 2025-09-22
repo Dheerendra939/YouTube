@@ -1,96 +1,71 @@
 import os
-from moviepy.editor import TextClip, CompositeVideoClip
-import google.auth.transport.requests
+from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# ==============================
-# Config
-# ==============================
-TEXT = "Hello YouTube Shorts! 🚀\nThis is an automated test upload."
+# === CONFIG ===
+TEXT = "This is a test short generated automatically!"
+DURATION = 10
 VIDEO_FILE = "output.mp4"
 
-# ==============================
-# Step 1: Generate Video
-# ==============================
-print("🎬 Generating video...")
+# === Create video ===
+def make_video():
+    # Background color
+    bg = ColorClip(size=(720, 1280), color=(0, 0, 0), duration=DURATION)
 
-txt_clip = TextClip(
-    TEXT,
-    fontsize=40,
-    color="white",
-    size=(720, 480),
-    method="caption",
-    font="DejaVu-Sans"
-).set_duration(10)
+    # Text in center
+    txt_clip = TextClip(
+        TEXT,
+        fontsize=60,
+        color="white",
+        size=(700, None),
+        method="caption",
+    ).set_position("center").set_duration(DURATION)
 
-video = CompositeVideoClip([txt_clip])
-video.write_videofile(VIDEO_FILE, fps=24)
+    final = CompositeVideoClip([bg, txt_clip])
+    final.write_videofile(VIDEO_FILE, fps=24, codec="libx264", audio=False)
 
-print("✅ Video generated:", VIDEO_FILE)
+# === Upload to YouTube ===
+def upload_to_youtube():
+    creds = Credentials(
+        None,
+        refresh_token=os.getenv("YOUTUBE_REFRESH_TOKEN"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.getenv("YOUTUBE_CLIENT_ID"),
+        client_secret=os.getenv("YOUTUBE_CLIENT_SECRET"),
+    )
 
-# ==============================
-# Step 2: Upload to YouTube
-# ==============================
-print("📤 Uploading to YouTube...")
+    youtube = build("youtube", "v3", credentials=creds)
 
-# Load credentials from GitHub Secrets (set in workflow)
-creds = Credentials(
-    None,
-    refresh_token=os.getenv("YOUTUBE_REFRESH_TOKEN"),
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=os.getenv("YOUTUBE_CLIENT_ID"),
-    client_secret=os.getenv("YOUTUBE_CLIENT_SECRET"),
-    scopes=["https://www.googleapis.com/auth/youtube.upload"]
-)
-
-# Refresh token if needed
-request = google.auth.transport.requests.Request()
-creds.refresh(request)
-
-youtube = build("youtube", "v3", credentials=creds)
-
-request_body = {
-    "snippet": {
-        "categoryId": "22",  # People & Blogs
-        "title": "🚀 Automated YouTube Short Test",
-        "description": "This short was uploaded automatically using GitHub Actions + Python!",
-        "tags": ["automation", "shorts", "python"]
-    },
-    "status": {
-        "privacyStatus": "private"  # change to "public" later
-    }
-}
-
-media_file = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/mp4")
-upload = youtube.videos().insert(
-    part="snippet,status",
-    body=request_body,
-    media_body=media_file
-)
-
-response = upload.execute()
-print("✅ Upload successful! Video ID:", response["id"])    token_uri='https://oauth2.googleapis.com/token'
-)
-
-youtube = build('youtube', 'v3', credentials=creds)
-
-media = MediaFileUpload(VIDEO_FILE)
-request = youtube.videos().insert(
-    part="snippet,status",
-    body={
+    request_body = {
         "snippet": {
-            "title": "10 Second Biography Short",
-            "description": "Testing AI short upload",
-            "tags": ["short", "AI", "test"],
-            "categoryId": "22"
+            "title": "Test Auto Short",
+            "description": "Uploaded automatically using GitHub Actions 🚀",
+            "tags": ["AI", "automation", "shorts"],
+            "categoryId": "22",
         },
         "status": {
-            "privacyStatus": "public"
-        }
-    },
-    media_body=media
-)
-response = request.execute()
-print("✅ Uploaded video ID:", response['id'])
+            "privacyStatus": "private"  # change to "public" when ready
+        },
+    }
+
+    media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=request_body,
+        media_body=media
+    )
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"Uploading... {int(status.progress() * 100)}%")
+
+    print("✅ Upload complete! Video ID:", response.get("id"))
+
+if __name__ == "__main__":
+    make_video()
+    upload_to_youtube()
