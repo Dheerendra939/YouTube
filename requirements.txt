@@ -1,6 +1,7 @@
-moviepy==1.0.3
-imageio[ffmpeg]
+opencv-python-headless
+numpy
+gTTS
 google-api-python-client
 google-auth
 google-auth-oauthlib
-pillow
+google-auth-httplib2
