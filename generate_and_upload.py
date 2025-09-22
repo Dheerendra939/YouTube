@@ -44,9 +44,9 @@ os.system(f"ffmpeg -y -i {video_file} -i {audio_file} -c:v copy -c:a aac -shorte
 # ---------------------------
 # 4. Upload to YouTube
 # ---------------------------
-CLIENT_ID = os.environ.get("CLIENT_ID")
-CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-REFRESH_TOKEN = os.environ.get("REFRESH_TOKEN")
+CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
+REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
 
 creds = Credentials(
     None,
