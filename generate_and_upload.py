@@ -1,40 +1,88 @@
 import os
-import datetime
-from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import ImageClip
-from google.oauth2.credentials import Credentials
+from moviepy.editor import ColorClip, concatenate_videoclips
+from moviepy.audio.io.AudioFileClip import AudioFileClip
+from moviepy.editor import AudioClip
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from google.oauth2.credentials import Credentials
+from gtts import gTTS
 
-# ========== Step 1: Generate 10-sec video ==========
-TEXT = "Hello World! This is a test Short."
-VIDEO_FILE = "output.mp4"
-IMAGE_FILE = "frame.png"
+# -----------------------------
+# CONFIG
+# -----------------------------
+REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
+CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
+ACCESS_TOKEN = os.environ.get("YOUTUBE_ACCESS_TOKEN")  # optional, auto-refresh
 
-# Create image with text using Pillow
-img = Image.new("RGB", (720, 1280), color=(30, 30, 30))
-draw = ImageDraw.Draw(img)
+VIDEO_TITLE = "Test Short"
+VIDEO_DESC = "This is a 10-second test short generated automatically."
+VIDEO_TAGS = ["test", "short", "github-actions"]
+VIDEO_FILENAME = "output.mp4"
+AUDIO_FILENAME = "audio.mp3"
 
-try:
-    font = ImageFont.truetype("DejaVuSans-Bold.ttf", 50)
-except:
-    font = ImageFont.load_default()
+TEXT_TO_SPEAK = "Hello! This is a test short generated automatically by GitHub Actions."
 
-w, h = draw.textsize(TEXT, font=font)
-draw.text(((720 - w) / 2, (1280 - h) / 2), TEXT, font=font, fill="white")
-img.save(IMAGE_FILE)
+# -----------------------------
+# CREATE AUDIO
+# -----------------------------
+tts = gTTS(text=TEXT_TO_SPEAK, lang='en')
+tts.save(AUDIO_FILENAME)
 
-# Convert image to 10s video
-clip = ImageClip(IMAGE_FILE).set_duration(10)
-clip.write_videofile(VIDEO_FILE, fps=24, codec="libx264", audio=False)
+# Load audio to get duration
+audio_clip = AudioFileClip(AUDIO_FILENAME)
+duration = audio_clip.duration
 
-# ========== Step 2: Upload to YouTube ==========
-CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
-CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
-REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
+# -----------------------------
+# CREATE VIDEO
+# -----------------------------
+# Create simple color clip with the same duration as audio
+video_clip = ColorClip(size=(720, 480), color=(0, 0, 0), duration=duration)
 
+# Add audio
+video_clip = video_clip.set_audio(audio_clip)
+
+# Write video file
+video_clip.write_videofile(VIDEO_FILENAME, fps=24, codec="libx264", audio_codec="aac")
+
+# -----------------------------
+# UPLOAD TO YOUTUBE
+# -----------------------------
+# Set up credentials
 creds = Credentials(
-    None,
+    token=ACCESS_TOKEN,
+    refresh_token=REFRESH_TOKEN,
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    token_uri="https://oauth2.googleapis.com/token"
+)
+
+youtube = build('youtube', 'v3', credentials=creds)
+
+# Prepare upload
+request_body = {
+    "snippet": {
+        "title": VIDEO_TITLE,
+        "description": VIDEO_DESC,
+        "tags": VIDEO_TAGS,
+        "categoryId": "22"  # People & Blogs
+    },
+    "status": {
+        "privacyStatus": "public",
+        "selfDeclaredMadeForKids": False
+    }
+}
+
+media = MediaFileUpload(VIDEO_FILENAME)
+
+request = youtube.videos().insert(
+    part="snippet,status",
+    body=request_body,
+    media_body=media
+)
+response = request.execute()
+
+print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
     refresh_token=REFRESH_TOKEN,
     token_uri="https://oauth2.googleapis.com/token",
     client_id=CLIENT_ID,
