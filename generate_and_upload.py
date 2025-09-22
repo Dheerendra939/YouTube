@@ -56,38 +56,4 @@ media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="vide
 request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
 response = request.execute()
 
-print("✅ Uploaded successfully! Video ID:", response.get("id"))    )
-
-    youtube = build("youtube", "v3", credentials=creds)
-
-    request_body = {
-        "snippet": {
-            "title": "Test Auto Short",
-            "description": "Uploaded automatically using GitHub Actions 🚀",
-            "tags": ["AI", "automation", "shorts"],
-            "categoryId": "22",
-        },
-        "status": {
-            "privacyStatus": "private"  # change to "public" when ready
-        },
-    }
-
-    media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
-
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body=request_body,
-        media_body=media
-    )
-
-    response = None
-    while response is None:
-        status, response = request.next_chunk()
-        if status:
-            print(f"Uploading... {int(status.progress() * 100)}%")
-
-    print("✅ Upload complete! Video ID:", response.get("id"))
-
-if __name__ == "__main__":
-    make_video()
-    upload_to_youtube()
+print("✅ Uploaded successfully! Video ID:", response.get("id"))
