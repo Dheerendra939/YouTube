@@ -64,6 +64,31 @@ print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
     token_uri="https://oauth2.googleapis.com/token",
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
+    scopes=["https://www.googleapis.com/auth/youtube.upload"]
+)
+
+youtube = build("youtube", "v3", credentials=creds)
+
+title = f"Test Short {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+request_body = {
+    "snippet": {
+        "title": title,
+        "description": "This is an auto-uploaded test short.",
+        "tags": ["test", "shorts", "automation"],
+        "categoryId": "22"
+    },
+    "status": {"privacyStatus": "unlisted"}
+}
+
+media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/*")
+request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
+response = request.execute()
+
+print("✅ Uploaded successfully! Video ID:", response.get("id"))    None,
+    refresh_token=REFRESH_TOKEN,
+    token_uri="https://oauth2.googleapis.com/token",
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
     scopes=["https://www.googleapis.com/auth/youtube.upload"],
 )
 
