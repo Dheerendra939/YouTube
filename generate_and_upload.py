@@ -199,7 +199,7 @@ request = youtube.videos().insert(
 )
 response = request.execute()
 
-print(f"✅ Uploaded as Short! Video ID: {response['id']}")]
+print(f"✅ Uploaded as Short! Video ID: {response['id']}")
 
 # -----------------------------
 # Step 1: Download images
