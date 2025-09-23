@@ -144,7 +144,8 @@ request = youtube.videos().insert(
 )
 
 response = request.execute()
-print(f"✅ Uploaded as Short! Video ID: {response['id']}")print("✅ Video created!")
+print(f"✅ Uploaded as Short! Video ID: {response['id']}")
+print("✅ Video created!")
 
 # -----------------------------
 # Step 4: Generate TTS Audio
