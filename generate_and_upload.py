@@ -40,17 +40,19 @@ image_urls = [
 ]
 
 image_files = []
+headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
 for i, url in enumerate(image_urls):
     img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
     try:
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
             with open(img_path, "wb") as f:
                 f.write(r.content)
             image_files.append(img_path)
             print(f"✅ Downloaded: {img_path}")
         else:
-            print(f"⚠️ Failed to download {url}")
+            print(f"⚠️ Failed to download {url}, status code: {r.status_code}")
     except Exception as e:
         print(f"⚠️ Error downloading {url}: {e}")
 
