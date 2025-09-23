@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 # -----------------------------
 # Settings
 # -----------------------------
-WIDTH, HEIGHT = 720, 1280   # Shorts: 9:16
+WIDTH, HEIGHT = 720, 1280   # Vertical 9:16 for Shorts
 FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
@@ -19,33 +19,30 @@ FINAL_FILENAME = "short_final.mp4"
 BIO_DURATION = 50  # seconds
 
 # -----------------------------
-# Step 1: Fetch Biography Text
+# Step 1: Fetch Biography Text (Hindi)
 # -----------------------------
-print("📖 Fetching Gandhi Ji biography from Wikipedia...")
-bio_text = wikipedia.summary("Mahatma Gandhi", sentences=5)
-print("✅ Biography fetched!")
-
-# Split into sentences for subtitles
-SENTENCES = bio_text.split(". ")
-SENTENCES = [s.strip() for s in SENTENCES if s.strip()]
+print("📖 Fetching Gandhi Ji biography from Hindi Wikipedia...")
+wikipedia.set_lang("hi")
+bio_text = wikipedia.summary("महात्मा गांधी", sentences=5)
+print("✅ Biography fetched in Hindi!")
 
 # -----------------------------
-# Step 2: Download Images
+# Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Downloading images...")
-IMAGE_URLS = [
+image_folder = "images"
+os.makedirs(image_folder, exist_ok=True)
+
+image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/14/Mahatma-Gandhi%2C_studio%2C_1931.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/7/76/MKGandhi.jpg"
 ]
 
-image_folder = "images"
-os.makedirs(image_folder, exist_ok=True)
-
 image_files = []
 headers = {"User-Agent": "Mozilla/5.0"}
 
-for i, url in enumerate(IMAGE_URLS):
+for i, url in enumerate(image_urls):
     img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
     try:
         r = requests.get(url, headers=headers, timeout=10)
@@ -55,7 +52,7 @@ for i, url in enumerate(IMAGE_URLS):
             image_files.append(img_path)
             print(f"✅ Downloaded: {img_path}")
         else:
-            print(f"⚠️ Failed to download {url}, status {r.status_code}")
+            print(f"⚠️ Failed to download {url}, status code: {r.status_code}")
     except Exception as e:
         print(f"⚠️ Error downloading {url}: {e}")
 
@@ -63,47 +60,62 @@ if not image_files:
     raise RuntimeError("❌ No images available for video.")
 
 # -----------------------------
-# Step 3: Generate TTS Audio
-# -----------------------------
-print("🎙️ Generating audio...")
-tts = gTTS(bio_text, lang="en")
-tts.save(AUDIO_FILENAME)
-print("✅ Audio generated!")
-
-# -----------------------------
-# Step 4: Create Video
+# Step 3: Generate Video with Images + Centered Hindi Text
 # -----------------------------
 print("🎬 Creating video...")
+frames_per_image = BIO_DURATION * FPS // len(image_files)
+
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
 font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 1.0
 thickness = 2
-color = (255, 255, 255)
 
-# Approx seconds per sentence
-seconds_per_sentence = BIO_DURATION // max(1, len(SENTENCES))
+# Split Hindi bio into shorter lines for readability
+wrapped_lines = []
+line = ""
+for word in bio_text.split():
+    if len(line + " " + word) < 25:
+        line += " " + word
+    else:
+        wrapped_lines.append(line.strip())
+        line = word
+if line:
+    wrapped_lines.append(line.strip())
 
-for idx, sentence in enumerate(SENTENCES):
-    img_file = image_files[idx % len(image_files)]  # reuse if fewer images
+for img_file in image_files:
     img = cv2.imread(img_file)
     if img is None:
+        print(f"⚠️ Skipping {img_file} (invalid image).")
         continue
+
     img = cv2.resize(img, (WIDTH, HEIGHT))
 
-    # Add text overlay
-    (text_w, text_h), _ = cv2.getTextSize(sentence, font, font_scale, thickness)
-    pos = (WIDTH // 2 - text_w // 2, HEIGHT - 100)
+    overlay = img.copy()
 
-    frame = img.copy()
-    cv2.putText(frame, sentence, pos, font, font_scale, color, thickness, cv2.LINE_AA)
+    # Position lines in the vertical center
+    total_text_height = len(wrapped_lines) * 40
+    start_y = HEIGHT // 2 - total_text_height // 2
 
-    for _ in range(seconds_per_sentence * FPS):
-        video.write(frame)
+    for i, line in enumerate(wrapped_lines):
+        (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
+        cv2.putText(overlay, line, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+    for _ in range(frames_per_image):
+        video.write(overlay)
 
 video.release()
 print("✅ Video created!")
+
+# -----------------------------
+# Step 4: Generate TTS Audio in Hindi
+# -----------------------------
+print("🎙️ Generating audio in Hindi...")
+tts = gTTS(bio_text, lang="hi")
+tts.save(AUDIO_FILENAME)
+print("✅ Hindi audio generated!")
 
 # -----------------------------
 # Step 5: Merge Video + Audio
@@ -137,9 +149,9 @@ request = youtube.videos().insert(
     part="snippet,status",
     body={
         "snippet": {
-            "title": "Mahatma Gandhi 50s Biography #Shorts",
+            "title": "महात्मा गांधी की 50 सेकंड जीवनी #Shorts",
             "description": bio_text + "\n\n#Shorts #MahatmaGandhi #History",
-            "tags": ["Mahatma Gandhi", "Biography", "Shorts", "History"],
+            "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
             "categoryId": "22"
         },
         "status": {
