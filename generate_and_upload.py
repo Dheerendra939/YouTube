@@ -1,79 +1,77 @@
 import os
 import cv2
-import random
 import requests
+import random
 import subprocess
-import google.generativeai as genai
 from google.cloud import texttospeech
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+import google.generativeai as genai
 
 # -----------------------------
 # Settings
 # -----------------------------
-WIDTH, HEIGHT = 720, 1280  # 9:16 Shorts
+WIDTH, HEIGHT = 720, 1280  # Vertical 9:16 for Shorts
 FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55  # seconds
-
-IMAGE_FOLDER = "images"
-os.makedirs(IMAGE_FOLDER, exist_ok=True)
+VIDEO_DURATION = 55  # seconds, adjust to 50-59
 
 # -----------------------------
-# Gemini AI Setup
+# Setup Gemini AI
 # -----------------------------
+print("🔧 Setting up Gemini AI...")
 genai.api_key = os.environ["GEMINI_API_KEY"]
+print("✅ Gemini AI ready!")
 
-print("🔧 Generating Gandhi Ji biography with Gemini AI...")
-bio_resp = genai.text.generate(
+# -----------------------------
+# Step 1: Generate Short Biography in Hindi
+# -----------------------------
+print("📖 Generating short Gandhi Ji biography in Hindi...")
+bio_resp = genai.Completion.create(
     model="text-bison-001",
-    prompt="50-second biography of Mahatma Gandhi in Hindi, simple and engaging"
+    prompt="Write a short biography of Mahatma Gandhi in Hindi, 50 seconds reading time.",
+    temperature=0.7,
+    max_output_tokens=500
 )
-bio_text = bio_resp.text
+bio_text = bio_resp.completions[0].text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
-# Gemini AI Image Generation
+# Step 2: Generate Images using Gemini AI
 # -----------------------------
-print("🖼️ Generating images with Gemini AI...")
-image_resp = genai.images.generate(
+print("🖼️ Generating images...")
+img_resp = genai.Image.create(
     model="image-bison-001",
-    prompt="Mahatma Gandhi, historical portrait, realistic style",
+    prompt="Mahatma Gandhi realistic portrait",
     size="720x1280",
     n=5
 )
-image_urls = [img.url for img in image_resp.images]
-
 image_files = []
-for i, url in enumerate(image_urls):
-    img_path = os.path.join(IMAGE_FOLDER, f"gandhi_{i}.png")
-    try:
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            with open(img_path, "wb") as f:
-                f.write(r.content)
-            image_files.append(img_path)
-            print(f"✅ Downloaded: {img_path}")
-    except Exception as e:
-        print(f"⚠️ Failed {url}: {e}")
-
-# Fallback: repeat images if less than 5
-while len(image_files) < 5:
-    image_files.append(random.choice(image_files))
+os.makedirs("images", exist_ok=True)
+for idx, img in enumerate(img_resp.images):
+    img_path = f"images/gandhi_{idx}.png"
+    # Download the generated image
+    r = requests.get(img.uri, timeout=10)
+    if r.status_code == 200:
+        with open(img_path, "wb") as f:
+            f.write(r.content)
+        image_files.append(img_path)
+        print(f"✅ Downloaded: {img_path}")
+if not image_files:
+    raise RuntimeError("❌ No images available for video.")
 
 # -----------------------------
-# Generate Video
+# Step 3: Generate Video with Images + Text
 # -----------------------------
 print("🎬 Creating video...")
-frames_per_image = (VIDEO_DURATION * FPS) // len(image_files)
-video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
+frames_per_image = VIDEO_DURATION * FPS // len(image_files)
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 1.0
 thickness = 2
 
-# Wrap Hindi text
+# Split text into short lines for readability
 wrapped_lines = []
 line = ""
 for word in bio_text.split():
@@ -89,6 +87,7 @@ for img_file in image_files:
     img = cv2.imread(img_file)
     img = cv2.resize(img, (WIDTH, HEIGHT))
     overlay = img.copy()
+
     total_text_height = len(wrapped_lines) * 40
     start_y = HEIGHT // 2 - total_text_height // 2
 
@@ -103,30 +102,28 @@ video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Google Cloud TTS (Hindi, pitch up)
+# Step 4: Generate AI Voiceover with Google Cloud TTS
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
 tts_client = texttospeech.TextToSpeechClient()
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(
     language_code="hi-IN",
-    ssml_gender=texttospeech.SsmlVoiceGender.MALE
+    ssml_gender=texttospeech.SsmlVoiceGender.MALE,
+    pitch=2.0  # pitch increase
 )
 audio_config = texttospeech.AudioConfig(
-    audio_encoding=texttospeech.AudioEncoding.MP3,
-    pitch=6.0  # raise pitch
+    audio_encoding=texttospeech.AudioEncoding.MP3
 )
 response = tts_client.synthesize_speech(
-    input=synthesis_input,
-    voice=voice,
-    audio_config=audio_config
+    input=synthesis_input, voice=voice, audio_config=audio_config
 )
 with open(AUDIO_FILENAME, "wb") as out:
     out.write(response.audio_content)
 print("✅ AI Hindi audio generated!")
 
 # -----------------------------
-# Merge Video + Audio
+# Step 5: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video and audio...")
 subprocess.run([
@@ -136,8 +133,12 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
-# Upload to YouTube
+# Step 6: Upload to YouTube
 # -----------------------------
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import google.auth.transport.requests
+
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
@@ -150,11 +151,10 @@ creds = Credentials(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET
 )
-import google.auth.transport.requests
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-safe_description = bio_text.replace("\n", " ").replace("\r", " ")[:4500]
+safe_description = bio_text.replace("\n", " ")[:4500]
 request = youtube.videos().insert(
     part="snippet,status",
     body={
@@ -164,11 +164,9 @@ request = youtube.videos().insert(
             "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
             "categoryId": "22"
         },
-        "status": {
-            "privacyStatus": "public"
-        }
+        "status": {"privacyStatus": "public"}
     },
     media_body=FINAL_FILENAME
 )
 response = request.execute()
-print(f"✅ Upload complete! 🎥 Video link: https://www.youtube.com/watch?v={response['id']}")
+print(f"✅ Upload complete! Video link: https://www.youtube.com/watch?v={response['id']}")
