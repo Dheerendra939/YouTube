@@ -1,9 +1,9 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: "0 0 * * *"  # optional daily
+    - cron: "0 0 * * *"  # optional: daily run at midnight UTC
 
 jobs:
   build:
@@ -23,13 +23,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         sudo apt-get update
-        sudo apt-get install -y ffmpeg
+        sudo apt-get install -y ffmpeg fonts-noto fonts-noto-cjk fonts-noto-color-emoji
 
     - name: Run script
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        TTS: ${{ secrets.TTS }}
         YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        TTS: ${{ secrets.TTS }}
       run: python generate_and_upload.py
