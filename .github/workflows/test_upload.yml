@@ -1,9 +1,9 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:  # manual trigger
   schedule:
-    - cron: "0 0 * * *"  # Optional: daily run at midnight UTC
+    - cron: "0 0 * * *"  # optional: daily at midnight UTC
 
 jobs:
   build:
@@ -31,7 +31,4 @@ jobs:
         YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        GOOGLE_APPLICATION_CREDENTIALS: /tmp/tts.json
-      run: |
-        echo "${{ secrets.TTS }}" > /tmp/tts.json
-        python generate_and_upload.py
+      run: python generate_and_upload.py
