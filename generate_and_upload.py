@@ -302,7 +302,8 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
-# Step 6: Upload to YouTube
+# -----------------------------
+# Step 6: Upload to YouTube Shorts
 # -----------------------------
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
@@ -335,6 +336,5 @@ request = youtube.videos().insert(
     },
     media_body=FINAL_FILENAME
 )
-
 response = request.execute()
 print(f"✅ Uploaded as Short! Video ID: {response['id']}")
