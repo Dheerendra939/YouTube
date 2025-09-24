@@ -5,22 +5,26 @@ import subprocess
 import requests
 import google.generativeai as genai
 from google.cloud import texttospeech
+from PIL import Image, ImageDraw, ImageFont # Using Pillow for text rendering
+from textwrap import wrap # For better text wrapping
 
 # -----------------------------
 # Settings
 # -----------------------------
-WIDTH, HEIGHT = 720, 1280   # Vertical 9:16 for Shorts
+WIDTH, HEIGHT = 720, 1280
 FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55  # Target video length in seconds
+VIDEO_DURATION = 55
+FONT_PATH = "NotoSans-Devanagari.ttf" # A font file that supports Hindi (e.g., download from Google Fonts)
 
 # -----------------------------
 # Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
-genai.api_key = os.environ["GEMINI_API_KEY"]
+genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+gemini_model = genai.GenerativeModel("gemini-pro")
 print("✅ Gemini AI ready!")
 
 # -----------------------------
@@ -28,12 +32,13 @@ print("✅ Gemini AI ready!")
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
 bio_prompt = "Write a concise biography of Mahatma Gandhi in Hindi suitable for a 50-second YouTube Short."
-bio_resp = genai.generate_text(model="text-bison-001", prompt=bio_prompt)
+# Use the correct, modern API call
+bio_resp = gemini_model.generate_content(bio_prompt)
 bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
-# Step 2: Fetch / Generate Images
+# Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Fetching images...")
 
@@ -59,64 +64,51 @@ for i, url in enumerate(image_urls):
                 f.write(r.content)
             images.append(img_path)
             print(f"✅ Downloaded: {img_path}")
-    except:
+    except Exception as e:
+        print(f"❌ Failed to download {url}: {e}")
         continue
 
-# If not enough images, generate via Gemini AI
-while len(images) < 5:
-    img_resp = genai.generate_image(
-        model="image-bison-001",
-        prompt="Portrait of Mahatma Gandhi, realistic, vertical, high quality"
-    )
-    img_url = img_resp.images[0].uri
-    img_path = os.path.join(image_folder, f"gandhi_gen_{len(images)}.jpg")
-    r = requests.get(img_url)
-    with open(img_path, "wb") as f:
-        f.write(r.content)
-    images.append(img_path)
-    print(f"✅ Generated image: {img_path}")
+# Note: The original image generation using gemini.generate_image() is not possible with this library.
+# You would need to use a different service or provide fallback images.
 
 # -----------------------------
-# Step 3: Create Video with Centered Hindi Text
+# Step 3: Create Video with Centered Hindi Text using Pillow
 # -----------------------------
 print("🎬 Creating video...")
 frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-font = cv2.FONT_HERSHEY_SIMPLEX
-font_scale = 1.0
-thickness = 2
+# Prepare font for Pillow
+font_size = 36
+try:
+    font = ImageFont.truetype(FONT_PATH, font_size)
+except IOError:
+    print(f"❌ Error: Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
+    exit()
 
-# Split Hindi bio into short lines
-wrapped_lines = []
-line = ""
-for word in bio_text.split():
-    if len(line + " " + word) < 25:
-        line += " " + word
-    else:
-        wrapped_lines.append(line.strip())
-        line = word
-if line:
-    wrapped_lines.append(line.strip())
+# Use textwrap for better word wrapping
+max_width_char = 30 # Adjust based on font size and line length
+wrapped_lines = wrap(bio_text, width=max_width_char, break_long_words=False, replace_whitespace=False)
 
 for img_file in images:
-    img = cv2.imread(img_file)
-    if img is None:
-        continue
-    img = cv2.resize(img, (WIDTH, HEIGHT))
-    overlay = img.copy()
+    img = Image.open(img_file).resize((WIDTH, HEIGHT))
+    draw = ImageDraw.Draw(img)
 
     # Position lines vertically centered
-    total_text_height = len(wrapped_lines) * 40
-    start_y = HEIGHT // 2 - total_text_height // 2
+    total_text_height = len(wrapped_lines) * (font_size + 10) # 10 is padding
+    start_y = (HEIGHT // 2) - (total_text_height // 2)
+
     for i, line in enumerate(wrapped_lines):
-        (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, thickness)
-        pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
-        cv2.putText(overlay, line, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        line_w, line_h = draw.textsize(line, font=font)
+        pos = ((WIDTH - line_w) // 2, start_y + i * (font_size + 10))
+        draw.text(pos, line, font=font, fill=(255, 255, 255))
+
+    # Convert Pillow image to OpenCV format for video writing
+    overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     for _ in range(frames_per_image):
-        video.write(overlay)
+        video.write(overlay_cv2)
 
 video.release()
 print("✅ Video created!")
@@ -133,7 +125,7 @@ voice = texttospeech.VoiceSelectionParams(
 )
 audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
-    pitch=5  # increase pitch
+    pitch=5
 )
 response = tts_client.synthesize_speech(
     input=synthesis_input,
@@ -148,11 +140,15 @@ print("✅ AI Hindi audio generated!")
 # Step 5: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video and audio...")
-subprocess.run([
-    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
-    "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
-], check=True)
-print("✅ Final video ready!")
+try:
+    subprocess.run([
+        "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
+        "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
+    ], check=True)
+    print("✅ Final video ready!")
+except subprocess.CalledProcessError as e:
+    print(f"❌ FFMPEG failed: {e}")
+    exit()
 
 # -----------------------------
 # Step 6: Upload to YouTube
