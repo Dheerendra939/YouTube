@@ -9,3 +9,4 @@ google-auth-httplib2
 google-cloud-texttospeech
 ffmpeg-python
 pydub
+openai
