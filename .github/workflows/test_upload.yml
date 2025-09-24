@@ -1,17 +1,17 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
+    # Manual trigger
   schedule:
-    - cron: "0 0 * * *"  # optional: daily run at midnight UTC
+    - cron: "0 0 * * *"  # optional daily run
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
     - name: Setup Python
       uses: actions/setup-python@v4
@@ -23,7 +23,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         sudo apt-get update
-        sudo apt-get install -y ffmpeg fonts-noto fonts-noto-cjk fonts-noto-color-emoji
+        sudo apt-get install -y ffmpeg
 
     - name: Run script
       env:
@@ -31,4 +31,5 @@ jobs:
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         TTS: ${{ secrets.TTS }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: python generate_and_upload.py
