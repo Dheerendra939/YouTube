@@ -1,153 +1,115 @@
 import os
 import requests
+import wikipedia
+import random
 import cv2
 import numpy as np
-import wikipedia
-import openai
+from PIL import Image, ImageDraw, ImageFont
 from google.cloud import texttospeech
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import google.auth.transport.requests
+import subprocess
+import json
 
-# -----------------------------
-# Config
-# -----------------------------
-openai.api_key = os.environ["OPENAI_API_KEY"]
-TTS_JSON = os.environ["TTS"]  # Google TTS credentials JSON stored in GitHub secret
-YOUTUBE_CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
-YOUTUBE_CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
-YOUTUBE_REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+# ========== CONFIG ==========
+FONT_PATH = "NotoSansDevanagari-Regular.ttf"  # upload this to repo
+TARGET_DURATION = 55  # target ~55 sec
+NUM_IMAGES = 5
+# ============================
 
-VIDEO_FILENAME = "video.mp4"
-AUDIO_FILENAME = "audio.mp3"
-FINAL_FILENAME = "short_final.mp4"
+# Setup Google TTS
+print("🔧 Setting up Google Cloud TTS client...")
+tts_json = os.environ["TTS"]
+with open("tts.json", "w") as f:
+    f.write(tts_json)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "tts.json"
+tts_client = texttospeech.TextToSpeechClient()
+print("✅ TTS client ready!")
 
-# -----------------------------
-# Step 1: Generate AI Biography in Hindi
-# -----------------------------
-print("📝 Generating AI biography in Hindi...")
-prompt = """
-आप महात्मा गांधी के बारे में एक संक्षिप्त, सरल और प्रभावशाली जीवनी लिखिए।
-यह जीवनी लगभग 1 मिनट के भाषण जितनी होनी चाहिए।
-सामान्य दर्शकों के लिए प्रेरणादायक और जानकारीपूर्ण अंदाज़ में लिखें।
-"""
+# Fetch Biography
+print("📖 Fetching Gandhi Ji biography from Hindi Wikipedia...")
+wikipedia.set_lang("hi")
+biography = wikipedia.summary("महात्मा गांधी", sentences=20)
 
-response = openai.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "system", "content": "आप एक जीवनी लेखक हैं।"},
-              {"role": "user", "content": prompt}],
-    max_tokens=500
-)
-bio_text = response.choices[0].message.content.strip()
-print("✅ AI Biography generated!")
+# Limit biography for ~55 sec audio (~700-800 chars in Hindi speech)
+biography = biography[:800]
+print("✅ Biography fetched in Hindi!")
 
-# -----------------------------
-# Step 2: Download images from Wikipedia
-# -----------------------------
+# Download images (ensure 5 valid)
 print("🖼️ Downloading images...")
-os.makedirs("images", exist_ok=True)
-search = wikipedia.page("Mahatma Gandhi")
-image_urls = search.images[:5]
-image_files = []
+img_urls = [
+    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_MK_Gandhi.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
+]
 
-for i, url in enumerate(image_urls):
+images = []
+for i, url in enumerate(img_urls):
     try:
         r = requests.get(url, timeout=10)
         if r.status_code == 200:
-            filename = f"images/gandhi_{i}.jpg"
-            with open(filename, "wb") as f:
+            fname = f"images/gandhi_{i}.jpg"
+            os.makedirs("images", exist_ok=True)
+            with open(fname, "wb") as f:
                 f.write(r.content)
-            image_files.append(filename)
-            print(f"✅ Downloaded: {filename}")
+            images.append(fname)
+            print(f"✅ Downloaded: {fname}")
         else:
-            print(f"⚠️ Failed to download {url}")
+            print(f"⚠️ Failed {url}, status {r.status_code}")
     except Exception as e:
         print(f"⚠️ Error downloading {url}: {e}")
 
-if not image_files:
-    raise Exception("❌ No images downloaded, cannot continue.")
+# If fewer than 5, repeat existing ones
+while len(images) < NUM_IMAGES:
+    images.append(random.choice(images))
 
-# -----------------------------
-# Step 3: Create Video Slideshow
-# -----------------------------
+# Create video with Hindi text
 print("🎬 Creating video...")
-height, width = 1280, 720
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, 1, (width, height))
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+video = cv2.VideoWriter("video.mp4", fourcc, 1, (720, 1280))
 
-for img_file in image_files:
-    img = cv2.imread(img_file)
-    if img is None:
-        continue
-    img = cv2.resize(img, (width, height))
-    for _ in range(3):  # show each image for 3 seconds
-        video.write(img)
+font = ImageFont.truetype(FONT_PATH, 48)
+
+for img_path in images:
+    img = Image.open(img_path).convert("RGB")
+    img = img.resize((720, 1280))
+
+    # Add Hindi biography text overlay
+    draw = ImageDraw.Draw(img)
+    text = "महात्मा गांधी"
+    text_w, text_h = draw.textsize(text, font=font)
+    draw.text(((720 - text_w) / 2, 50), text, font=font, fill=(255, 255, 255))
+
+    frame = np.array(img)
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    for _ in range(int(TARGET_DURATION / NUM_IMAGES)):
+        video.write(frame)
 
 video.release()
 print("✅ Video created!")
 
-# -----------------------------
-# Step 4: Generate Hindi Voiceover with Google Cloud TTS
-# -----------------------------
+# Generate TTS with pitch adjustment
 print("🎙️ Generating AI voiceover in Hindi...")
-creds_dict = eval(TTS_JSON)
-credentials = service_account.Credentials.from_service_account_info(creds_dict)
-tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
-
-synthesis_input = texttospeech.SynthesisInput(text=bio_text)
-voice = texttospeech.VoiceSelectionParams(
-    language_code="hi-IN",
-    name="hi-IN-Standard-D",
-    ssml_gender=texttospeech.SsmlVoiceGender.MALE,
+synthesis_input = texttospeech.SynthesisInput(
+    ssml=f"<speak><prosody pitch='+2st'>{biography}</prosody></speak>"
 )
+voice = texttospeech.VoiceSelectionParams(language_code="hi-IN", ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL)
 audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-response_tts = tts_client.synthesize_speech(
-    input=synthesis_input, voice=voice, audio_config=audio_config
+response = tts_client.synthesize_speech(
+    input=synthesis_input,
+    voice=voice,
+    audio_config=audio_config
 )
 
-with open(AUDIO_FILENAME, "wb") as out:
-    out.write(response_tts.audio_content)
-
+with open("audio.mp3", "wb") as out:
+    out.write(response.audio_content)
 print("✅ AI Hindi audio generated!")
 
-# -----------------------------
-# Step 5: Merge Video and Audio with FFmpeg
-# -----------------------------
+# Merge audio + video
 print("🔀 Merging video and audio...")
-os.system(f"ffmpeg -y -i {VIDEO_FILENAME} -i {AUDIO_FILENAME} -shortest -c:v copy -c:a aac {FINAL_FILENAME}")
+subprocess.run([
+    "ffmpeg", "-y", "-i", "video.mp4", "-i", "audio.mp3",
+    "-c:v", "copy", "-c:a", "aac", "-shortest", "short_final.mp4"
+])
 print("✅ Final video ready!")
-
-# -----------------------------
-# Step 6: Upload to YouTube Shorts
-# -----------------------------
-print("📤 Uploading to YouTube...")
-
-creds = google.oauth2.credentials.Credentials(
-    None,
-    refresh_token=YOUTUBE_REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=YOUTUBE_CLIENT_ID,
-    client_secret=YOUTUBE_CLIENT_SECRET
-)
-creds.refresh(google.auth.transport.requests.Request())
-youtube = build("youtube", "v3", credentials=creds)
-
-safe_description = bio_text.replace("\n", " ").replace("\r", " ")
-safe_description = safe_description[:4500]
-
-request = youtube.videos().insert(
-    part="snippet,status",
-    body={
-        "snippet": {
-            "title": "महात्मा गांधी की 1 मिनट जीवनी #Shorts",
-            "description": safe_description + "\n\n#Shorts #MahatmaGandhi #History",
-            "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
-            "categoryId": "22"
-        },
-        "status": {"privacyStatus": "public"}
-    },
-    media_body=FINAL_FILENAME
-)
-response = request.execute()
-print(f"✅ Uploaded as Short! Video ID: {response['id']}")
