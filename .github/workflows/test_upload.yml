@@ -1,17 +1,17 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:
-    # Manual trigger
+  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: "0 0 * * *"  # optional daily run
+    - cron: "0 0 * * *"  # Optional: daily run at midnight UTC
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
     - name: Setup Python
       uses: actions/setup-python@v4
@@ -27,9 +27,11 @@ jobs:
 
     - name: Run script
       env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        TTS: ${{ secrets.TTS }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      run: python generate_and_upload.py
+        GOOGLE_APPLICATION_CREDENTIALS: /tmp/tts.json
+      run: |
+        echo "${{ secrets.TTS }}" > /tmp/tts.json
+        python generate_and_upload.py
