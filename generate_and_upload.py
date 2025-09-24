@@ -4,9 +4,10 @@ import requests
 import wikipedia
 import random
 import subprocess
-from google.cloud import texttospeech
+import google.auth.transport.requests
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.cloud import texttospeech
 
 # -----------------------------
 # Settings
