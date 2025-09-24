@@ -1,40 +1,190 @@
 import os
+import random
 import requests
 import wikipedia
-import random
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 from google.cloud import texttospeech
-import subprocess
-import json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import re
 
-# ========== CONFIG ==========
-FONT_PATH = "NotoSansDevanagari-Regular.ttf"  # upload this to repo
-TARGET_DURATION = 55  # target ~55 sec
-NUM_IMAGES = 5
-# ============================
-
-# Setup Google TTS
+# -----------------------------
+# Google Cloud TTS Setup
+# -----------------------------
 print("🔧 Setting up Google Cloud TTS client...")
 tts_json = os.environ["TTS"]
-with open("tts.json", "w") as f:
+with open("tts_key.json", "w") as f:
     f.write(tts_json)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "tts.json"
-tts_client = texttospeech.TextToSpeechClient()
+
+credentials = service_account.Credentials.from_service_account_file("tts_key.json")
+tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
 print("✅ TTS client ready!")
 
-# Fetch Biography
-print("📖 Fetching Gandhi Ji biography from Hindi Wikipedia...")
+# -----------------------------
+# Fetch Biography in Hindi
+# -----------------------------
+person = "महात्मा गांधी"
+print(f"📖 Fetching {person} biography from Hindi Wikipedia...")
 wikipedia.set_lang("hi")
-biography = wikipedia.summary("महात्मा गांधी", sentences=20)
-
-# Limit biography for ~55 sec audio (~700-800 chars in Hindi speech)
-biography = biography[:800]
+bio = wikipedia.summary(person, sentences=6)
+bio = re.sub(r"\([^)]*\)", "", bio)  # remove brackets
 print("✅ Biography fetched in Hindi!")
 
-# Download images (ensure 5 valid)
+# -----------------------------
+# Text to Speech (Hindi, with pitch)
+# -----------------------------
+print("🎙️ Generating narration...")
+synthesis_input = texttospeech.SynthesisInput(text=bio)
+
+voice = texttospeech.VoiceSelectionParams(
+    language_code="hi-IN",
+    name="hi-IN-Wavenet-D"  # Google Wavenet voice
+)
+
+audio_config = texttospeech.AudioConfig(
+    audio_encoding=texttospeech.AudioEncoding.MP3,
+    pitch=2.0,  # Raise pitch
+    speaking_rate=1.0
+)
+
+response = tts_client.synthesize_speech(
+    input=synthesis_input, voice=voice, audio_config=audio_config
+)
+
+with open("narration.mp3", "wb") as out:
+    out.write(response.audio_content)
+print("✅ Narration saved as narration.mp3")
+
+# -----------------------------
+# Download Gandhi Images
+# -----------------------------
 print("🖼️ Downloading images...")
+image_folder = "images"
+os.makedirs(image_folder, exist_ok=True)
+
+image_urls = [
+    "https://upload.wikimedia.org/wikipedia/commons/5/5d/Mahatma-Gandhi%2C_studio%2C_1931.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/7/76/MKGandhi.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/b/bd/Mahatma-Gandhi%2C_London%2C_1931.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/1/14/Mahatma-Gandhi_seated.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/6/6e/Mahatma_Gandhi_portrait.jpg",
+]
+
+image_files = []
+headers = {"User-Agent": "Mozilla/5.0"}
+
+for i, url in enumerate(image_urls):
+    img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            with open(img_path, "wb") as f:
+                f.write(r.content)
+            image_files.append(img_path)
+            print(f"✅ Downloaded: {img_path}")
+        else:
+            print(f"⚠️ Failed {url}, status {r.status_code}")
+    except Exception as e:
+        print(f"⚠️ Error downloading {url}: {e}")
+
+# Guarantee at least 5 images
+if len(image_files) < 5:
+    if image_files:
+        while len(image_files) < 5:
+            image_files.append(random.choice(image_files))
+    else:
+        raise RuntimeError("❌ Could not fetch any images for video.")
+
+print(f"✅ Using {len(image_files)} images for video.")
+
+# -----------------------------
+# Create Video with Images + Text
+# -----------------------------
+print("🎬 Creating video...")
+
+audio_duration = 55  # seconds (target length 50–59 sec)
+fps = 30
+frame_size = (720, 1280)  # portrait 9:16
+out = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, frame_size)
+
+# Split bio text into smaller lines for subtitles
+words = bio.split(" ")
+lines, current = [], ""
+for w in words:
+    if len(current) + len(w) < 25:
+        current += " " + w
+    else:
+        lines.append(current.strip())
+        current = w
+lines.append(current.strip())
+
+frames_per_image = (audio_duration * fps) // len(image_files)
+
+for idx, img_path in enumerate(image_files):
+    img = cv2.imread(img_path)
+    img = cv2.resize(img, frame_size)
+
+    for _ in range(frames_per_image):
+        frame = img.copy()
+
+        # Choose subtitle line
+        line = lines[idx % len(lines)]
+
+        # Center text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        textsize = cv2.getTextSize(line, font, 1.2, 2)[0]
+        x = (frame.shape[1] - textsize[0]) // 2
+        y = (frame.shape[0] + textsize[1]) // 2
+
+        cv2.putText(frame, line, (x, y), font, 1.2, (255, 255, 255), 3, cv2.LINE_AA)
+
+        out.write(frame)
+
+out.release()
+print("✅ Video created: output.mp4")
+
+# -----------------------------
+# Upload to YouTube
+# -----------------------------
+print("📤 Uploading video to YouTube...")
+
+CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
+CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
+REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+
+creds = Credentials(
+    None,
+    refresh_token=REFRESH_TOKEN,
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    token_uri="https://oauth2.googleapis.com/token",
+)
+
+youtube = build("youtube", "v3", credentials=creds)
+
+request_body = {
+    "snippet": {
+        "categoryId": "22",
+        "title": f"{person} Biography in Hindi #shorts",
+        "description": f"{person} की 59 सेकंड की जीवनी।",
+        "tags": ["Biography", "Gandhi", "Hindi", "Shorts"],
+    },
+    "status": {"privacyStatus": "public"},
+}
+
+media = MediaFileUpload("output.mp4", chunksize=-1, resumable=True)
+
+upload = youtube.videos().insert(
+    part="snippet,status", body=request_body, media_body=media
+)
+response = upload.execute()
+print("✅ Upload complete!")
+print("📺 Video link: https://www.youtube.com/watch?v=" + response["id"])print("🖼️ Downloading images...")
 img_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_MK_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
