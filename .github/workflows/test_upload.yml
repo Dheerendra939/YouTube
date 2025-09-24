@@ -1,9 +1,9 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:       # Manual trigger
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *"   # Daily at midnight UTC
 
 jobs:
   build:
