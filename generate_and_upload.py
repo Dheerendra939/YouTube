@@ -1,77 +1,94 @@
 import os
 import cv2
-import requests
 import random
 import subprocess
-from google.cloud import texttospeech
+import requests
 import google.generativeai as genai
+from google.cloud import texttospeech
 
 # -----------------------------
 # Settings
 # -----------------------------
-WIDTH, HEIGHT = 720, 1280  # Vertical 9:16 for Shorts
+WIDTH, HEIGHT = 720, 1280   # Vertical 9:16 for Shorts
 FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55  # seconds, adjust to 50-59
+VIDEO_DURATION = 55  # Target video length in seconds
 
 # -----------------------------
-# Setup Gemini AI
+# Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
 genai.api_key = os.environ["GEMINI_API_KEY"]
 print("✅ Gemini AI ready!")
 
 # -----------------------------
-# Step 1: Generate Short Biography in Hindi
+# Step 1: Generate Biography in Hindi
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
-bio_resp = genai.Completion.create(
-    model="text-bison-001",
-    prompt="Write a short biography of Mahatma Gandhi in Hindi, 50 seconds reading time.",
-    temperature=0.7,
-    max_output_tokens=500
-)
-bio_text = bio_resp.completions[0].text.strip()
+bio_prompt = "Write a concise biography of Mahatma Gandhi in Hindi suitable for a 50-second YouTube Short."
+bio_resp = genai.generate_text(model="text-bison-001", prompt=bio_prompt)
+bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
-# Step 2: Generate Images using Gemini AI
+# Step 2: Fetch / Generate Images
 # -----------------------------
-print("🖼️ Generating images...")
-img_resp = genai.Image.create(
-    model="image-bison-001",
-    prompt="Mahatma Gandhi realistic portrait",
-    size="720x1280",
-    n=5
-)
-image_files = []
-os.makedirs("images", exist_ok=True)
-for idx, img in enumerate(img_resp.images):
-    img_path = f"images/gandhi_{idx}.png"
-    # Download the generated image
-    r = requests.get(img.uri, timeout=10)
-    if r.status_code == 200:
-        with open(img_path, "wb") as f:
-            f.write(r.content)
-        image_files.append(img_path)
-        print(f"✅ Downloaded: {img_path}")
-if not image_files:
-    raise RuntimeError("❌ No images available for video.")
+print("🖼️ Fetching images...")
+
+image_urls = [
+    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
+]
+
+image_folder = "images"
+os.makedirs(image_folder, exist_ok=True)
+images = []
+
+headers = {"User-Agent": "Mozilla/5.0"}
+for i, url in enumerate(image_urls):
+    img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            with open(img_path, "wb") as f:
+                f.write(r.content)
+            images.append(img_path)
+            print(f"✅ Downloaded: {img_path}")
+    except:
+        continue
+
+# If not enough images, generate via Gemini AI
+while len(images) < 5:
+    img_resp = genai.generate_image(
+        model="image-bison-001",
+        prompt="Portrait of Mahatma Gandhi, realistic, vertical, high quality"
+    )
+    img_url = img_resp.images[0].uri
+    img_path = os.path.join(image_folder, f"gandhi_gen_{len(images)}.jpg")
+    r = requests.get(img_url)
+    with open(img_path, "wb") as f:
+        f.write(r.content)
+    images.append(img_path)
+    print(f"✅ Generated image: {img_path}")
 
 # -----------------------------
-# Step 3: Generate Video with Images + Text
+# Step 3: Create Video with Centered Hindi Text
 # -----------------------------
 print("🎬 Creating video...")
-frames_per_image = VIDEO_DURATION * FPS // len(image_files)
+frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
+
 font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 1.0
 thickness = 2
 
-# Split text into short lines for readability
+# Split Hindi bio into short lines
 wrapped_lines = []
 line = ""
 for word in bio_text.split():
@@ -83,14 +100,16 @@ for word in bio_text.split():
 if line:
     wrapped_lines.append(line.strip())
 
-for img_file in image_files:
+for img_file in images:
     img = cv2.imread(img_file)
+    if img is None:
+        continue
     img = cv2.resize(img, (WIDTH, HEIGHT))
     overlay = img.copy()
 
+    # Position lines vertically centered
     total_text_height = len(wrapped_lines) * 40
     start_y = HEIGHT // 2 - total_text_height // 2
-
     for i, line in enumerate(wrapped_lines):
         (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, thickness)
         pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
@@ -98,28 +117,31 @@ for img_file in image_files:
 
     for _ in range(frames_per_image):
         video.write(overlay)
+
 video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Step 4: Generate AI Voiceover with Google Cloud TTS
+# Step 4: Generate AI TTS in Hindi
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
 tts_client = texttospeech.TextToSpeechClient()
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(
     language_code="hi-IN",
-    ssml_gender=texttospeech.SsmlVoiceGender.MALE,
-    pitch=2.0  # pitch increase
+    ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
 )
 audio_config = texttospeech.AudioConfig(
-    audio_encoding=texttospeech.AudioEncoding.MP3
+    audio_encoding=texttospeech.AudioEncoding.MP3,
+    pitch=5  # increase pitch
 )
 response = tts_client.synthesize_speech(
-    input=synthesis_input, voice=voice, audio_config=audio_config
+    input=synthesis_input,
+    voice=voice,
+    audio_config=audio_config
 )
-with open(AUDIO_FILENAME, "wb") as out:
-    out.write(response.audio_content)
+with open(AUDIO_FILENAME, "wb") as f:
+    f.write(response.audio_content)
 print("✅ AI Hindi audio generated!")
 
 # -----------------------------
@@ -154,7 +176,8 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-safe_description = bio_text.replace("\n", " ")[:4500]
+safe_description = bio_text.replace("\n", " ").replace("\r", " ")[:4500]
+
 request = youtube.videos().insert(
     part="snippet,status",
     body={
@@ -168,5 +191,6 @@ request = youtube.videos().insert(
     },
     media_body=FINAL_FILENAME
 )
+
 response = request.execute()
 print(f"✅ Upload complete! Video link: https://www.youtube.com/watch?v={response['id']}")
