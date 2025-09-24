@@ -128,6 +128,7 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
+# -----------------------------
 # Step 6: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
@@ -145,12 +146,16 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
+# Clean + truncate description
+safe_description = bio_text.replace("\n", " ").replace("\r", " ")
+safe_description = safe_description[:4500]  # keep within YouTube limits
+
 request = youtube.videos().insert(
     part="snippet,status",
     body={
         "snippet": {
             "title": "महात्मा गांधी की 50 सेकंड जीवनी #Shorts",
-            "description": bio_text + "\n\n#Shorts #MahatmaGandhi #History",
+            "description": safe_description + "\n\n#Shorts #MahatmaGandhi #History",
             "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
             "categoryId": "22"
         },
