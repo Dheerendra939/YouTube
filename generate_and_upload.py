@@ -180,8 +180,6 @@ request = youtube.videos().insert(
 )
 response = request.execute()
 print(f"✅ Uploaded as Short! Video ID: {response['id']}")    max_tokens=600
-)
-
 bio_text = response['choices'][0]['message']['content'].strip()
 print("✅ AI biography generated!")
 
