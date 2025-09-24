@@ -1,74 +1,56 @@
 import os
-import io
 import cv2
 import requests
-import wikipedia
 import subprocess
-from pydub import AudioSegment
-from google.cloud import texttospeech
-from googleapiclient.discovery import build
+import openai
+import json
+from google.cloud import texttospeech_v1
 from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 import google.auth.transport.requests
 
 # -----------------------------
 # Settings
 # -----------------------------
-WIDTH, HEIGHT = 720, 1280  # Vertical 9:16 for Shorts
+WIDTH, HEIGHT = 720, 1280  # 9:16 Shorts
 FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 50  # seconds total
-MAX_CHARS_PER_LINE = 20
+BIO_DURATION = 60  # seconds
 
 # -----------------------------
-# Step 0: Setup Google TTS Client
+# Step 1: Generate AI Biography
 # -----------------------------
-print("🔧 Setting up Google Cloud TTS client...")
-tts_json = os.environ["TTS"]
-with open("tts_creds.json", "w", encoding="utf-8") as f:
-    f.write(tts_json)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "tts_creds.json"
-tts_client = texttospeech.TextToSpeechClient()
-print("✅ TTS client ready!")
+print("📝 Generating AI biography in Hindi...")
+openai.api_key = os.environ["OPENAI_API_KEY"]
+
+prompt = (
+    "Write a concise, engaging 1-minute biography of Mahatma Gandhi in Hindi suitable for a YouTube Short. "
+    "Make it natural, easy to understand, and suitable for narration."
+)
+
+response = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.7,
+    max_tokens=600
+)
+
+bio_text = response['choices'][0]['message']['content'].strip()
+print("✅ AI biography generated!")
 
 # -----------------------------
-# Step 1: Fetch Biography Text (Hindi)
-# -----------------------------
-print("📖 Fetching Gandhi Ji biography from Hindi Wikipedia...")
-wikipedia.set_lang("hi")
-bio_text = wikipedia.summary("महात्मा गांधी", sentences=5)
-print("✅ Biography fetched in Hindi!")
-
-# -----------------------------
-# Step 2: Split bio into chunks for TTS and video frames
-# -----------------------------
-def split_text(text, max_bytes=4000):
-    chunks = []
-    current = ""
-    for word in text.split():
-        if len((current + " " + word).encode("utf-8")) < max_bytes:
-            current += " " + word
-        else:
-            chunks.append(current.strip())
-            current = word
-    if current:
-        chunks.append(current.strip())
-    return chunks
-
-tts_chunks = split_text(bio_text, max_bytes=4000)
-num_chunks = len(tts_chunks)
-frames_per_chunk = VIDEO_DURATION * FPS // num_chunks
-
-# -----------------------------
-# Step 3: Fetch Images
+# Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Downloading images...")
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 
 image_urls = [
-    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg"
+    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/1/14/Mahatma-Gandhi%2C_studio%2C_1931.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/7/76/MKGandhi.jpg"
 ]
 
 image_files = []
@@ -92,9 +74,11 @@ if not image_files:
     raise RuntimeError("❌ No images available for video.")
 
 # -----------------------------
-# Step 4: Generate Video with Centered Text
+# Step 3: Generate Video with Text
 # -----------------------------
 print("🎬 Creating video...")
+frames_per_image = BIO_DURATION * FPS // len(image_files)
+
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
@@ -102,66 +86,68 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 1.0
 thickness = 2
 
-def wrap_text(text, max_chars=MAX_CHARS_PER_LINE):
-    words = text.split()
-    lines = []
-    line = ""
-    for w in words:
-        if len((line + " " + w).strip()) <= max_chars:
-            line += " " + w
-        else:
-            lines.append(line.strip())
-            line = w
-    if line:
-        lines.append(line.strip())
-    return lines
+# Split text into smaller lines
+wrapped_lines = []
+line = ""
+for word in bio_text.split():
+    if len(line + " " + word) < 25:
+        line += " " + word
+    else:
+        wrapped_lines.append(line.strip())
+        line = word
+if line:
+    wrapped_lines.append(line.strip())
 
-for chunk in tts_chunks:
-    overlay_lines = wrap_text(chunk)
-    for img_file in image_files:
-        img = cv2.imread(img_file)
-        img = cv2.resize(img, (WIDTH, HEIGHT))
-        overlay = img.copy()
+for img_file in image_files:
+    img = cv2.imread(img_file)
+    if img is None:
+        print(f"⚠️ Skipping {img_file} (invalid image).")
+        continue
+    img = cv2.resize(img, (WIDTH, HEIGHT))
+    overlay = img.copy()
 
-        total_text_height = len(overlay_lines) * 40
-        start_y = HEIGHT // 2 - total_text_height // 2
+    total_text_height = len(wrapped_lines) * 40
+    start_y = HEIGHT // 2 - total_text_height // 2
 
-        for i, line_text in enumerate(overlay_lines):
-            (text_w, text_h), _ = cv2.getTextSize(line_text, font, font_scale, thickness)
-            pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
-            cv2.putText(overlay, line_text, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    for i, line in enumerate(wrapped_lines):
+        (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
+        cv2.putText(overlay, line, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
-        for _ in range(frames_per_chunk):
-            video.write(overlay)
+    for _ in range(frames_per_image):
+        video.write(overlay)
 
 video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Step 5: Generate AI Voiceover in Hindi (chunked)
+# Step 4: Generate AI TTS using Google Cloud
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
-audio_segments = []
+tts_json = os.environ["TTS"]
+with open("tts.json", "w") as f:
+    f.write(tts_json)
 
-for chunk in tts_chunks:
-    synthesis_input = texttospeech.SynthesisInput(text=chunk)
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="hi-IN",
-        ssml_gender=texttospeech.SsmlVoiceGender.MALE
-    )
-    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-    response = tts_client.synthesize_speech(
-        input=synthesis_input, voice=voice, audio_config=audio_config
-    )
-    segment = AudioSegment.from_file(io.BytesIO(response.audio_content), format="mp3")
-    audio_segments.append(segment)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "tts.json"
 
-final_audio = sum(audio_segments)
-final_audio.export(AUDIO_FILENAME, format="mp3")
+client = texttospeech_v1.TextToSpeechClient()
+synthesis_input = texttospeech_v1.SynthesisInput(text=bio_text)
+voice = texttospeech_v1.VoiceSelectionParams(
+    language_code="hi-IN",
+    ssml_gender=texttospeech_v1.SsmlVoiceGender.FEMALE
+)
+audio_config = texttospeech_v1.AudioConfig(audio_encoding=texttospeech_v1.AudioEncoding.MP3)
+
+response = client.synthesize_speech(
+    input=synthesis_input, voice=voice, audio_config=audio_config
+)
+
+with open(AUDIO_FILENAME, "wb") as out:
+    out.write(response.audio_content)
 print("✅ AI Hindi audio generated!")
 
 # -----------------------------
-# Step 6: Merge Video + Audio
+# Step 5: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video and audio...")
 subprocess.run([
@@ -171,7 +157,7 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
-# Step 7: Upload to YouTube
+# Step 6: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
@@ -188,20 +174,19 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-safe_description = bio_text.replace("\n", " ").replace("\r", " ")[:4500]
+safe_description = bio_text.replace("\n", " ").replace("\r", " ")
+safe_description = safe_description[:4500]
 
 request = youtube.videos().insert(
     part="snippet,status",
     body={
         "snippet": {
-            "title": "महात्मा गांधी की 50 सेकंड जीवनी #Shorts",
+            "title": "महात्मा गांधी की 1 मिनट जीवनी #Shorts",
             "description": safe_description + "\n\n#Shorts #MahatmaGandhi #History",
             "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
             "categoryId": "22"
         },
-        "status": {
-            "privacyStatus": "public"
-        }
+        "status": {"privacyStatus": "public"}
     },
     media_body=FINAL_FILENAME
 )
