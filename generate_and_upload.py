@@ -2,11 +2,11 @@ import os
 import cv2
 import requests
 import wikipedia
-from gtts import gTTS
 import subprocess
-import google.auth.transport.requests
+from google.cloud import texttospeech
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+import json
 
 # -----------------------------
 # Settings
@@ -19,6 +19,14 @@ FINAL_FILENAME = "short_final.mp4"
 BIO_DURATION = 50  # seconds
 
 # -----------------------------
+# Step 0: Setup Google TTS
+# -----------------------------
+with open("tts_credentials.json", "w") as f:
+    f.write(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "tts_credentials.json"
+tts_client = texttospeech.TextToSpeechClient()
+
+# -----------------------------
 # Step 1: Fetch Biography Text (Hindi)
 # -----------------------------
 print("📖 Fetching Gandhi Ji biography from Hindi Wikipedia...")
@@ -27,7 +35,7 @@ bio_text = wikipedia.summary("महात्मा गांधी", sentences=
 print("✅ Biography fetched in Hindi!")
 
 # -----------------------------
-# Step 2: Fetch Images
+# Step 2: Download Images
 # -----------------------------
 print("🖼️ Downloading images...")
 image_folder = "images"
@@ -41,7 +49,6 @@ image_urls = [
 
 image_files = []
 headers = {"User-Agent": "Mozilla/5.0"}
-
 for i, url in enumerate(image_urls):
     img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
     try:
@@ -60,62 +67,64 @@ if not image_files:
     raise RuntimeError("❌ No images available for video.")
 
 # -----------------------------
-# Step 3: Generate Video with Images + Centered Hindi Text
+# Step 3: Generate Video with Centered Text
 # -----------------------------
 print("🎬 Creating video...")
 frames_per_image = BIO_DURATION * FPS // len(image_files)
 
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
-
 font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 1.0
 thickness = 2
 
-# Split Hindi bio into shorter lines for readability
-wrapped_lines = []
+# Split bio text into lines (~25 characters per line)
+lines = []
 line = ""
 for word in bio_text.split():
     if len(line + " " + word) < 25:
         line += " " + word
     else:
-        wrapped_lines.append(line.strip())
+        lines.append(line.strip())
         line = word
 if line:
-    wrapped_lines.append(line.strip())
+    lines.append(line.strip())
 
 for img_file in image_files:
     img = cv2.imread(img_file)
     if img is None:
-        print(f"⚠️ Skipping {img_file} (invalid image).")
         continue
-
     img = cv2.resize(img, (WIDTH, HEIGHT))
-
     overlay = img.copy()
 
-    # Position lines in the vertical center
-    total_text_height = len(wrapped_lines) * 40
+    total_text_height = len(lines) * 40
     start_y = HEIGHT // 2 - total_text_height // 2
-
-    for i, line in enumerate(wrapped_lines):
-        (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, thickness)
+    for i, l in enumerate(lines):
+        (text_w, text_h), _ = cv2.getTextSize(l, font, font_scale, thickness)
         pos = (WIDTH // 2 - text_w // 2, start_y + i * 40)
-        cv2.putText(overlay, line, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        cv2.putText(overlay, l, pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
     for _ in range(frames_per_image):
         video.write(overlay)
-
 video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Step 4: Generate TTS Audio in Hindi
+# Step 4: Generate AI Voiceover (Hindi)
 # -----------------------------
-print("🎙️ Generating audio in Hindi...")
-tts = gTTS(bio_text, lang="hi")
-tts.save(AUDIO_FILENAME)
-print("✅ Hindi audio generated!")
+print("🎙️ Generating AI voiceover in Hindi...")
+synthesis_input = texttospeech.SynthesisInput(text=bio_text)
+voice = texttospeech.VoiceSelectionParams(
+    language_code="hi-IN",
+    ssml_gender=texttospeech.SsmlVoiceGender.MALE
+)
+audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+response = tts_client.synthesize_speech(
+    input=synthesis_input, voice=voice, audio_config=audio_config
+)
+with open(AUDIO_FILENAME, "wb") as out:
+    out.write(response.audio_content)
+print("✅ AI Hindi audio generated!")
 
 # -----------------------------
 # Step 5: Merge Video + Audio
@@ -127,7 +136,6 @@ subprocess.run([
 ], check=True)
 print("✅ Final video ready!")
 
-# -----------------------------
 # -----------------------------
 # Step 6: Upload to YouTube
 # -----------------------------
@@ -146,9 +154,7 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-# Clean + truncate description
-safe_description = bio_text.replace("\n", " ").replace("\r", " ")
-safe_description = safe_description[:4500]  # keep within YouTube limits
+safe_description = bio_text.replace("\n", " ").replace("\r", " ")[:4500]
 
 request = youtube.videos().insert(
     part="snippet,status",
@@ -159,12 +165,9 @@ request = youtube.videos().insert(
             "tags": ["महात्मा गांधी", "जीवनी", "Shorts", "इतिहास"],
             "categoryId": "22"
         },
-        "status": {
-            "privacyStatus": "public"
-        }
+        "status": {"privacyStatus": "public"}
     },
     media_body=FINAL_FILENAME
 )
-
 response = request.execute()
 print(f"✅ Uploaded as Short! Video ID: {response['id']}")
