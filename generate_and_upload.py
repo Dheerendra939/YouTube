@@ -7,7 +7,6 @@ import numpy as np
 import google.generativeai as genai
 from google.cloud import texttospeech
 from google.oauth2 import service_account
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
@@ -22,8 +21,8 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55
-FONT_PATH = "NotoSans-Devanagari.ttf"  # Make sure this font file exists
+VIDEO_DURATION = 55  # seconds
+FONT_PATH = "NotoSans-Devanagari.ttf"  # Ensure this font exists
 
 # -----------------------------
 # Gemini AI Setup
@@ -37,7 +36,7 @@ print("✅ Gemini AI ready!")
 # Step 1: Generate Biography in Hindi
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
-bio_prompt = "महात्मा गांधी जी का 50 सेकंड का संक्षिप्त जीवन परिचय हिंदी में लिखिए।"
+bio_prompt = "write 50 second motivational biography of mahatma gandhi in hindi. we will use it for narration so don't write any extra line."
 bio_resp = gemini_model.generate_content(bio_prompt)
 bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
@@ -46,7 +45,6 @@ print("✅ Biography generated!")
 # Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Fetching images...")
-
 image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
@@ -72,7 +70,6 @@ for i, url in enumerate(image_urls):
     except Exception as e:
         print(f"❌ Failed to download {url}: {e}")
 
-# Ensure at least 5 images
 if len(images) < 5:
     print("⚠️ Less than 5 images downloaded, repeating existing images.")
     while len(images) < 5:
@@ -88,30 +85,33 @@ font_size = 36
 try:
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
-    print(f"❌ Error: Could not find font file at {FONT_PATH}. Provide a valid Devanagari font.")
+    print(f"❌ Could not find font file at {FONT_PATH}")
     exit()
 
 wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
-frames_per_line = (VIDEO_DURATION * FPS) // len(wrapped_lines)
+total_lines = len(wrapped_lines)
+frames_per_line = (VIDEO_DURATION * FPS) // total_lines
 
-for img_file in images:
+for i, line in enumerate(wrapped_lines):
+    img_file = images[i % len(images)]
     img_base = Image.open(img_file).resize((WIDTH, HEIGHT))
-    for line in wrapped_lines:
-        img = img_base.copy()
-        draw = ImageDraw.Draw(img)
-        bbox = font.getbbox(line)
-        line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        pos = ((WIDTH - line_w) // 2, HEIGHT // 2 - line_h // 2)
-        draw.text(pos, line, font=font, fill=(255, 255, 255))
-        overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        for _ in range(frames_per_line):
-            video.write(overlay_cv2)
+    img = img_base.copy()
+    draw = ImageDraw.Draw(img)
+
+    bbox = font.getbbox(line)
+    line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pos = ((WIDTH - line_w) // 2, HEIGHT // 2 - line_h // 2)
+    draw.text(pos, line, font=font, fill=(255, 255, 255))
+
+    overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    for _ in range(frames_per_line):
+        video.write(overlay_cv2)
 
 video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Step 4: Generate AI TTS in Hindi with Higher Pitch
+# Step 4: Generate AI TTS in Hindi with higher pitch
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
 tts_json = os.environ["TTS"]
@@ -126,7 +126,7 @@ voice = texttospeech.VoiceSelectionParams(
 )
 audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
-    pitch=15  # Increased pitch
+    pitch=-10  # Increased pitch
 )
 response = tts_client.synthesize_speech(
     input=synthesis_input,
@@ -141,15 +141,11 @@ print("✅ AI Hindi audio generated!")
 # Step 5: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video and audio...")
-try:
-    subprocess.run([
-        "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
-        "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
-    ], check=True)
-    print("✅ Final video ready!")
-except subprocess.CalledProcessError as e:
-    print(f"❌ FFMPEG failed: {e}")
-    exit()
+subprocess.run([
+    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
+    "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
+], check=True)
+print("✅ Final video ready!")
 
 # -----------------------------
 # Step 6: Upload to YouTube
