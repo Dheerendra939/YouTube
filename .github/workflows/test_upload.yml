@@ -1,9 +1,9 @@
 name: Generate and Upload YouTube Short
 
 on:
-  workflow_dispatch:  # You can manually trigger the workflow
+  workflow_dispatch:
   schedule:
-    - cron: "0 10 * * *"  # Example: runs daily at 10:00 UTC
+    - cron: "0 10 * * *"  # daily at 10:00 UTC
 
 jobs:
   build-and-upload:
@@ -11,6 +11,7 @@ jobs:
 
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TTS: ${{ secrets.TTS }}  # <-- Add this
       YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
       YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
       YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
@@ -31,5 +32,4 @@ jobs:
           pip install google-generativeai pillow opencv-python-headless ffmpeg-python requests google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 numpy
 
       - name: Run the script
-        run: |
-          python generate_and_upload.py
+        run: python generate_and_upload.py
