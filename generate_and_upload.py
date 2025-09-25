@@ -40,35 +40,16 @@ bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
+# Step 2: Generate 10 image URLs via AI
 # -----------------------------
-# Step 2: Get 10 valid image URLs from Gemini AI
-# -----------------------------
-print("🖼️ Generating 10 valid image URLs via Gemini AI...")
+print("🖼️ Generating 10 image URLs via Gemini AI...")
+image_prompt = ("Give 10 free image links related to mahatma gandhi that I can use in my YouTube video. Provide only Direct urls one per line.")
+images_resp = gemini_model.generate_content(image_prompt)
+image_urls = [url.strip() for url in images_resp.text.split("\n") if url.strip()]
 
-valid_image_urls = []
-
-while len(valid_image_urls) < 10:
-    remaining = 10 - len(valid_image_urls)
-    image_prompt = f"Provide {remaining} copyright-free public domain images of Mahatma Gandhi. Only direct image URLs, one per line."
-    try:
-        response = gemini_model.generate_content(image_prompt)
-        candidate_urls = [url.strip() for url in response.text.split("\n") if url.strip()]
-        
-        # Validate each URL
-        headers = {"User-Agent": "Mozilla/5.0"}
-        for url in candidate_urls:
-            if len(valid_image_urls) >= 10:
-                break
-            try:
-                r = requests.head(url, headers=headers, timeout=5)
-                if r.status_code == 200:
-                    valid_image_urls.append(url)
-            except:
-                continue
-    except Exception as e:
-        print(f"⚠️ Gemini AI error: {e}")
-
-print(f"✅ {len(valid_image_urls)} valid image URLs obtained!")
+# Ensure at least 10 URLs
+while len(image_urls) < 10:
+    image_urls.append(random.choice(image_urls))
 
 # -----------------------------
 # Step 3: Download Images
