@@ -43,7 +43,7 @@ print("✅ Biography generated!")
 # Step 2: Generate 10 image URLs via AI
 # -----------------------------
 print("🖼️ Generating 10 image URLs via Gemini AI...")
-image_prompt = ("Give 10 free image links related to mahatma gandhi that I can use in my YouTube video. Provide only Direct urls one per line.")
+image_prompt = ("only 10 Direct link of mahatma gandhi , one per line.")
 images_resp = gemini_model.generate_content(image_prompt)
 image_urls = [url.strip() for url in images_resp.text.split("\n") if url.strip()]
 
