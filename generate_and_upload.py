@@ -43,43 +43,63 @@ bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
-# Step 2: Fetch Images from Pexels
+# Step 2: Fetch Images (Pexels + Fallback Wikipedia)
 # -----------------------------
-print("🖼️ Fetching images from Pexels...")
-PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")  # Store API key in GitHub Secrets
-headers = {"Authorization": PEXELS_API_KEY}
+print("🖼️ Fetching images...")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+pexels_url = "https://api.pexels.com/v1/search"
 query = "Mahatma Gandhi"
 
-pexels_resp = requests.get(
-    f"https://api.pexels.com/v1/search?query={query}&per_page=5",
-    headers=headers
-)
-
+headers = {"Authorization": PEXELS_API_KEY}
 images = []
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 
-if pexels_resp.status_code == 200:
-    data = pexels_resp.json()
-    for i, photo in enumerate(data.get("photos", [])):
-        img_url = photo["src"]["large"]
-        img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
-        r = requests.get(img_url, timeout=10)
-        if r.status_code == 200:
+try:
+    r = requests.get(pexels_url, headers=headers, params={"query": query, "per_page": 5}, timeout=10)
+    if r.status_code == 200:
+        data = r.json()
+        for i, photo in enumerate(data.get("photos", [])):
+            img_url = photo["src"]["large"]
+            img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
+            img_data = requests.get(img_url, timeout=10).content
             with open(img_path, "wb") as f:
-                f.write(r.content)
+                f.write(img_data)
             images.append(img_path)
-            print(f"✅ Downloaded: {img_path}")
-else:
-    print(f"❌ Pexels API error: {pexels_resp.text}")
+            print(f"✅ Downloaded from Pexels: {img_path}")
+    else:
+        print(f"❌ Pexels API error: {r.text}")
+except Exception as e:
+    print(f"❌ Pexels fetch failed: {e}")
 
+# Fallback: Wikipedia images
 if len(images) < 5:
-    print("⚠️ Less than 5 images found, repeating existing images.")
-    while len(images) < 5 and images:
-        images.append(random.choice(images))
+    print("⚠️ Not enough images from Pexels, using Wikipedia fallback...")
+    fallback_urls = [
+        "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
+    ]
+    for i, url in enumerate(fallback_urls):
+        img_path = os.path.join(image_folder, f"wiki_{i}.jpg")
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                with open(img_path, "wb") as f:
+                    f.write(r.content)
+                images.append(img_path)
+                print(f"✅ Downloaded fallback: {img_path}")
+        except:
+            pass
 
-if not images:
-    raise Exception("❌ No images available. Check your Pexels API key and query.")
+if len(images) == 0:
+    raise Exception("❌ No images available. Check your Pexels API key and fallback URLs.")
+
+# Ensure at least 5 images
+while len(images) < 5:
+    images.append(random.choice(images))
 
 # -----------------------------
 # Step 3: Create Video with Line-by-Line Text
@@ -132,7 +152,7 @@ voice = texttospeech.VoiceSelectionParams(
 )
 audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
-    pitch=6  # Higher pitch (positive increases pitch, negative lowers)
+    pitch=-5  # slightly higher pitch
 )
 response = tts_client.synthesize_speech(
     input=synthesis_input,
