@@ -1,9 +1,9 @@
 import os
 import cv2
-import numpy as np
 import random
 import subprocess
 import requests
+import numpy as np
 import google.generativeai as genai
 from google.cloud import texttospeech
 from PIL import Image, ImageDraw, ImageFont
@@ -20,40 +20,31 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55  # seconds
-FONT_PATH = "NotoSans-Devanagari.ttf"  # Hindi font
-MAX_IMAGES = 5
+VIDEO_DURATION = 55
+FONT_PATH = "NotoSans-Devanagari.ttf"  # Make sure this font file exists
 
-# -----------------------------
 # -----------------------------
 # Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
-import google.generativeai as genai
-
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-gemini_model = genai.GenerativeModel("gemini-pro")
+gemini_model = genai.GenerativeModel("gemini-2.5-flash")  # ✅ Correct model
 print("✅ Gemini AI ready!")
 
 # -----------------------------
 # Step 1: Generate Biography in Hindi
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
-
-bio_prompt = (
-    "महात्मा गांधी की एक संक्षिप्त जीवनी लिखें जो 50 सेकंड के "
-    "YouTube शॉर्ट्स के लिए उपयुक्त हो। सरल हिंदी भाषा का प्रयोग करें।"
-)
-
+bio_prompt = "महात्मा गांधी जी का 50 सेकंड का संक्षिप्त जीवन परिचय हिंदी में लिखिए।"
 bio_resp = gemini_model.generate_content(bio_prompt)
-
-# Some responses are returned as list of candidates
-bio_text = bio_resp.text.strip() if hasattr(bio_resp, "text") else str(bio_resp)
+bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
+
 # -----------------------------
 # Step 2: Fetch Images
 # -----------------------------
-print("🖼️ Downloading images...")
+print("🖼️ Fetching images...")
+
 image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
@@ -61,6 +52,7 @@ image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
 ]
+
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 images = []
@@ -75,45 +67,33 @@ for i, url in enumerate(image_urls):
                 f.write(r.content)
             images.append(img_path)
             print(f"✅ Downloaded: {img_path}")
-        else:
-            print(f"⚠️ Failed {url}, status code: {r.status_code}")
     except Exception as e:
-        print(f"❌ Error downloading {url}: {e}")
-
-# Ensure at least 5 images
-if len(images) == 0:
-    placeholder = "placeholder.jpg"  # Add a default image in repo
-    images = [placeholder] * MAX_IMAGES
-elif len(images) < MAX_IMAGES:
-    while len(images) < MAX_IMAGES:
-        images.append(random.choice(images))
+        print(f"❌ Failed to download {url}: {e}")
+        continue
 
 # -----------------------------
-# Step 3: Create Video with Hindi Text
+# Step 3: Create Video with Centered Hindi Text
 # -----------------------------
 print("🎬 Creating video...")
 frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-# Load font
+font_size = 36
 try:
-    font_size = 36
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
-    print(f"❌ Could not find font {FONT_PATH}")
+    print(f"❌ Error: Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
     exit()
 
-# Wrap text
-wrapped_lines = wrap(bio_text, width=30, break_long_words=False)
+wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
 
 for img_file in images:
     img = Image.open(img_file).resize((WIDTH, HEIGHT))
     draw = ImageDraw.Draw(img)
 
-    # Vertical center
     total_text_height = len(wrapped_lines) * (font_size + 10)
-    start_y = (HEIGHT - total_text_height) // 2
+    start_y = (HEIGHT // 2) - (total_text_height // 2)
 
     for i, line in enumerate(wrapped_lines):
         line_w, line_h = draw.textsize(line, font=font)
@@ -121,6 +101,7 @@ for img_file in images:
         draw.text(pos, line, font=font, fill=(255, 255, 255))
 
     overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
     for _ in range(frames_per_image):
         video.write(overlay_cv2)
 
@@ -197,5 +178,6 @@ request = youtube.videos().insert(
     },
     media_body=FINAL_FILENAME
 )
+
 response = request.execute()
 print(f"✅ Upload complete! Video link: https://www.youtube.com/watch?v={response['id']}")
