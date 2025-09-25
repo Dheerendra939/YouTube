@@ -46,11 +46,7 @@ print("✅ Biography generated!")
 # -----------------------------
 print("🖼️ Fetching images...")
 image_urls = [
-    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
-    "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
-    "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
-    "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
-    "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
+    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg"
 ]
 
 image_folder = "images"
@@ -155,7 +151,7 @@ CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
-creds = Credentials(
+creds = credentials(
     None,
     refresh_token=REFRESH_TOKEN,
     token_uri="https://oauth2.googleapis.com/token",
