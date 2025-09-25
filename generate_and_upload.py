@@ -144,14 +144,19 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
+# -----------------------------
 # Step 6: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
+from google.oauth2.credentials import Credentials  # Add this line if not already imported
+from googleapiclient.discovery import build
+import google.auth.transport.requests
+
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
-creds = credentials(
+creds = Credentials(
     None,
     refresh_token=REFRESH_TOKEN,
     token_uri="https://oauth2.googleapis.com/token",
