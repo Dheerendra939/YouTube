@@ -128,7 +128,7 @@ tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(
     language_code="hi-IN",
-    ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
+    ssml_gender=texttospeech.SsmlVoiceGender.MALE
 )
 audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
