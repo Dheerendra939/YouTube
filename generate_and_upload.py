@@ -7,6 +7,7 @@ import numpy as np
 import google.generativeai as genai
 from google.cloud import texttospeech
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
@@ -42,34 +43,43 @@ bio_text = bio_resp.text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
-# Step 2: Fetch Images
+# Step 2: Fetch Images from Pexels
 # -----------------------------
-print("🖼️ Fetching images...")
-image_urls = [
-    "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg"
-]
+print("🖼️ Fetching images from Pexels...")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")  # Store API key in GitHub Secrets
+headers = {"Authorization": PEXELS_API_KEY}
+query = "Mahatma Gandhi"
 
+pexels_resp = requests.get(
+    f"https://api.pexels.com/v1/search?query={query}&per_page=5",
+    headers=headers
+)
+
+images = []
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
-images = []
 
-headers = {"User-Agent": "Mozilla/5.0"}
-for i, url in enumerate(image_urls):
-    img_path = os.path.join(image_folder, f"gandhi_{i}.jpg")
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
+if pexels_resp.status_code == 200:
+    data = pexels_resp.json()
+    for i, photo in enumerate(data.get("photos", [])):
+        img_url = photo["src"]["large"]
+        img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
+        r = requests.get(img_url, timeout=10)
         if r.status_code == 200:
             with open(img_path, "wb") as f:
                 f.write(r.content)
             images.append(img_path)
             print(f"✅ Downloaded: {img_path}")
-    except Exception as e:
-        print(f"❌ Failed to download {url}: {e}")
+else:
+    print(f"❌ Pexels API error: {pexels_resp.text}")
 
 if len(images) < 5:
-    print("⚠️ Less than 5 images downloaded, repeating existing images.")
-    while len(images) < 5:
+    print("⚠️ Less than 5 images found, repeating existing images.")
+    while len(images) < 5 and images:
         images.append(random.choice(images))
+
+if not images:
+    raise Exception("❌ No images available. Check your Pexels API key and query.")
 
 # -----------------------------
 # Step 3: Create Video with Line-by-Line Text
@@ -122,7 +132,7 @@ voice = texttospeech.VoiceSelectionParams(
 )
 audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
-    pitch=-10  # Increased pitch
+    pitch=6  # Higher pitch (positive increases pitch, negative lowers)
 )
 response = tts_client.synthesize_speech(
     input=synthesis_input,
@@ -144,13 +154,9 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
-# -----------------------------
 # Step 6: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
-from google.oauth2.credentials import Credentials  # Add this line if not already imported
-from googleapiclient.discovery import build
-import google.auth.transport.requests
 
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
