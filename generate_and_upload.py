@@ -25,25 +25,31 @@ FONT_PATH = "NotoSans-Devanagari.ttf"  # Hindi font
 MAX_IMAGES = 5
 
 # -----------------------------
-# Step 0: Gemini AI Setup
+# -----------------------------
+# Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
+import google.generativeai as genai
+
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+gemini_model = genai.GenerativeModel("gemini-pro")
 print("✅ Gemini AI ready!")
 
 # -----------------------------
 # Step 1: Generate Biography in Hindi
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
-bio_prompt = "Write a concise biography of Mahatma Gandhi in Hindi suitable for a 50-second YouTube Short."
-bio_resp = genai.text.generate(
-    model="gemini-pro",
-    prompt=bio_prompt,
-    temperature=0.7
-)
-bio_text = bio_resp.output_text.strip()
-print("✅ Biography generated!")
 
+bio_prompt = (
+    "महात्मा गांधी की एक संक्षिप्त जीवनी लिखें जो 50 सेकंड के "
+    "YouTube शॉर्ट्स के लिए उपयुक्त हो। सरल हिंदी भाषा का प्रयोग करें।"
+)
+
+bio_resp = gemini_model.generate_content(bio_prompt)
+
+# Some responses are returned as list of candidates
+bio_text = bio_resp.text.strip() if hasattr(bio_resp, "text") else str(bio_resp)
+print("✅ Biography generated!")
 # -----------------------------
 # Step 2: Fetch Images
 # -----------------------------
