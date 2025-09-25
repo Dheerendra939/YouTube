@@ -1,16 +1,17 @@
 import os
 import cv2
+import random
 import subprocess
 import requests
 import numpy as np
+import json
 import google.generativeai as genai
 from google.cloud import texttospeech
+from google.oauth2 import service_account, Credentials
+from googleapiclient.discovery import build
+import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-import google.auth.transport.requests
 
 # -----------------------------
 # Settings
@@ -20,15 +21,15 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55
-FONT_PATH = "NotoSans-Devanagari.ttf"  # Make sure this font file exists
+VIDEO_DURATION = 55  # seconds
+FONT_PATH = "NotoSans-Devanagari.ttf"  # Must exist in your repo
 
 # -----------------------------
 # Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-gemini_model = genai.GenerativeModel("gemini-2.5-flash")  # ✅ Correct model
+gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 print("✅ Gemini AI ready!")
 
 # -----------------------------
@@ -44,7 +45,6 @@ print("✅ Biography generated!")
 # Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Fetching images...")
-
 image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
@@ -52,7 +52,6 @@ image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
 ]
-
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 images = []
@@ -71,6 +70,10 @@ for i, url in enumerate(image_urls):
         print(f"❌ Failed to download {url}: {e}")
         continue
 
+# Ensure we have at least 5 images by repeating existing ones if necessary
+while len(images) < 5:
+    images.append(random.choice(images))
+
 # -----------------------------
 # Step 3: Create Video with Centered Hindi Text
 # -----------------------------
@@ -79,11 +82,12 @@ frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
+# Load Devanagari font
 font_size = 36
 try:
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
-    print(f"❌ Error: Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
+    print(f"❌ Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
     exit()
 
 wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
@@ -102,7 +106,6 @@ for img_file in images:
         draw.text(pos, line, font=font, fill=(255, 255, 255))
 
     overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
     for _ in range(frames_per_image):
         video.write(overlay_cv2)
 
@@ -113,7 +116,11 @@ print("✅ Video created!")
 # Step 4: Generate AI TTS in Hindi
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
-tts_client = texttospeech.TextToSpeechClient()
+tts_json = os.environ["TTS"]
+credentials_info = json.loads(tts_json)
+credentials = service_account.Credentials.from_service_account_info(credentials_info)
+tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
+
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(
     language_code="hi-IN",
@@ -177,7 +184,7 @@ request = youtube.videos().insert(
         },
         "status": {"privacyStatus": "public"}
     },
-    media_body=MediaFileUpload(FINAL_FILENAME)
+    media_body=FINAL_FILENAME
 )
 
 response = request.execute()
