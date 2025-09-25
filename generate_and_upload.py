@@ -1,6 +1,5 @@
 import os
 import cv2
-import random
 import subprocess
 import requests
 import numpy as np
@@ -10,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 import google.auth.transport.requests
 
 # -----------------------------
@@ -96,10 +96,11 @@ for img_file in images:
     start_y = (HEIGHT // 2) - (total_text_height // 2)
 
     for i, line in enumerate(wrapped_lines):
-    bbox = font.getbbox(line)
-    line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    pos = ((WIDTH - line_w) // 2, start_y + i * (font_size + 10))
-    draw.text(pos, line, font=font, fill=(255, 255, 255))
+        bbox = font.getbbox(line)
+        line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        pos = ((WIDTH - line_w) // 2, start_y + i * (font_size + 10))
+        draw.text(pos, line, font=font, fill=(255, 255, 255))
+
     overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     for _ in range(frames_per_image):
@@ -176,7 +177,7 @@ request = youtube.videos().insert(
         },
         "status": {"privacyStatus": "public"}
     },
-    media_body=FINAL_FILENAME
+    media_body=MediaFileUpload(FINAL_FILENAME)
 )
 
 response = request.execute()
