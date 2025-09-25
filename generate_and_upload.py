@@ -4,14 +4,15 @@ import random
 import subprocess
 import requests
 import numpy as np
-import json
 import google.generativeai as genai
 from google.cloud import texttospeech
-from google.oauth2 import service_account, Credentials
+from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
+import json
 
 # -----------------------------
 # Settings
@@ -21,8 +22,8 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55  # seconds
-FONT_PATH = "NotoSans-Devanagari.ttf"  # Must exist in your repo
+VIDEO_DURATION = 55
+FONT_PATH = "NotoSans-Devanagari.ttf"  # Make sure this font file exists
 
 # -----------------------------
 # Gemini AI Setup
@@ -45,6 +46,7 @@ print("✅ Biography generated!")
 # Step 2: Fetch Images
 # -----------------------------
 print("🖼️ Fetching images...")
+
 image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
@@ -52,6 +54,7 @@ image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
 ]
+
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 images = []
@@ -68,11 +71,12 @@ for i, url in enumerate(image_urls):
             print(f"✅ Downloaded: {img_path}")
     except Exception as e:
         print(f"❌ Failed to download {url}: {e}")
-        continue
 
-# Ensure we have at least 5 images by repeating existing ones if necessary
-while len(images) < 5:
-    images.append(random.choice(images))
+# Ensure at least 5 images
+if len(images) < 5:
+    print("⚠️ Less than 5 images downloaded, repeating existing images.")
+    while len(images) < 5:
+        images.append(random.choice(images))
 
 # -----------------------------
 # Step 3: Create Video with Centered Hindi Text
@@ -82,12 +86,11 @@ frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-# Load Devanagari font
 font_size = 36
 try:
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
-    print(f"❌ Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
+    print(f"❌ Error: Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
     exit()
 
 wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
@@ -116,6 +119,7 @@ print("✅ Video created!")
 # Step 4: Generate AI TTS in Hindi
 # -----------------------------
 print("🎙️ Generating AI voiceover in Hindi...")
+# Load TTS JSON from GitHub Secrets
 tts_json = os.environ["TTS"]
 credentials_info = json.loads(tts_json)
 credentials = service_account.Credentials.from_service_account_info(credentials_info)
