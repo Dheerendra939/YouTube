@@ -1,12 +1,16 @@
 import os
 import cv2
+import numpy as np
 import random
 import subprocess
 import requests
 import google.generativeai as genai
 from google.cloud import texttospeech
-from PIL import Image, ImageDraw, ImageFont # Using Pillow for text rendering
-from textwrap import wrap # For better text wrapping
+from PIL import Image, ImageDraw, ImageFont
+from textwrap import wrap
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import google.auth.transport.requests
 
 # -----------------------------
 # Settings
@@ -16,15 +20,15 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-VIDEO_DURATION = 55
-FONT_PATH = "NotoSans-Devanagari.ttf" # A font file that supports Hindi (e.g., download from Google Fonts)
+VIDEO_DURATION = 55  # seconds
+FONT_PATH = "NotoSans-Devanagari.ttf"  # Hindi font
+MAX_IMAGES = 5
 
 # -----------------------------
-# Gemini AI Setup
+# Step 0: Gemini AI Setup
 # -----------------------------
 print("🔧 Setting up Gemini AI...")
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-gemini_model = genai.GenerativeModel("gemini-pro")
 print("✅ Gemini AI ready!")
 
 # -----------------------------
@@ -32,16 +36,18 @@ print("✅ Gemini AI ready!")
 # -----------------------------
 print("📖 Generating short Gandhi Ji biography in Hindi...")
 bio_prompt = "Write a concise biography of Mahatma Gandhi in Hindi suitable for a 50-second YouTube Short."
-# Use the correct, modern API call
-bio_resp = gemini_model.generate_content(bio_prompt)
-bio_text = bio_resp.text.strip()
+bio_resp = genai.text.generate(
+    model="gemini-pro",
+    prompt=bio_prompt,
+    temperature=0.7
+)
+bio_text = bio_resp.output_text.strip()
 print("✅ Biography generated!")
 
 # -----------------------------
 # Step 2: Fetch Images
 # -----------------------------
-print("🖼️ Fetching images...")
-
+print("🖼️ Downloading images...")
 image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
@@ -49,7 +55,6 @@ image_urls = [
     "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
     "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
 ]
-
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
 images = []
@@ -64,49 +69,52 @@ for i, url in enumerate(image_urls):
                 f.write(r.content)
             images.append(img_path)
             print(f"✅ Downloaded: {img_path}")
+        else:
+            print(f"⚠️ Failed {url}, status code: {r.status_code}")
     except Exception as e:
-        print(f"❌ Failed to download {url}: {e}")
-        continue
+        print(f"❌ Error downloading {url}: {e}")
 
-# Note: The original image generation using gemini.generate_image() is not possible with this library.
-# You would need to use a different service or provide fallback images.
+# Ensure at least 5 images
+if len(images) == 0:
+    placeholder = "placeholder.jpg"  # Add a default image in repo
+    images = [placeholder] * MAX_IMAGES
+elif len(images) < MAX_IMAGES:
+    while len(images) < MAX_IMAGES:
+        images.append(random.choice(images))
 
 # -----------------------------
-# Step 3: Create Video with Centered Hindi Text using Pillow
+# Step 3: Create Video with Hindi Text
 # -----------------------------
 print("🎬 Creating video...")
 frames_per_image = (VIDEO_DURATION * FPS) // len(images)
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 video = cv2.VideoWriter(VIDEO_FILENAME, fourcc, FPS, (WIDTH, HEIGHT))
 
-# Prepare font for Pillow
-font_size = 36
+# Load font
 try:
+    font_size = 36
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
-    print(f"❌ Error: Could not find font file at {FONT_PATH}. Please provide a valid Devanagari font.")
+    print(f"❌ Could not find font {FONT_PATH}")
     exit()
 
-# Use textwrap for better word wrapping
-max_width_char = 30 # Adjust based on font size and line length
-wrapped_lines = wrap(bio_text, width=max_width_char, break_long_words=False, replace_whitespace=False)
+# Wrap text
+wrapped_lines = wrap(bio_text, width=30, break_long_words=False)
 
 for img_file in images:
     img = Image.open(img_file).resize((WIDTH, HEIGHT))
     draw = ImageDraw.Draw(img)
 
-    # Position lines vertically centered
-    total_text_height = len(wrapped_lines) * (font_size + 10) # 10 is padding
-    start_y = (HEIGHT // 2) - (total_text_height // 2)
+    # Vertical center
+    total_text_height = len(wrapped_lines) * (font_size + 10)
+    start_y = (HEIGHT - total_text_height) // 2
 
     for i, line in enumerate(wrapped_lines):
         line_w, line_h = draw.textsize(line, font=font)
         pos = ((WIDTH - line_w) // 2, start_y + i * (font_size + 10))
         draw.text(pos, line, font=font, fill=(255, 255, 255))
 
-    # Convert Pillow image to OpenCV format for video writing
     overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
     for _ in range(frames_per_image):
         video.write(overlay_cv2)
 
@@ -153,10 +161,6 @@ except subprocess.CalledProcessError as e:
 # -----------------------------
 # Step 6: Upload to YouTube
 # -----------------------------
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-import google.auth.transport.requests
-
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
@@ -187,6 +191,5 @@ request = youtube.videos().insert(
     },
     media_body=FINAL_FILENAME
 )
-
 response = request.execute()
 print(f"✅ Upload complete! Video link: https://www.youtube.com/watch?v={response['id']}")
