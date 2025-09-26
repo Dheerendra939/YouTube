@@ -50,7 +50,7 @@ print("✅ Gemini AI ready!")
 print("🎯 Generating new engaging topic...")
 topic_prompt = (
     "Generate one highly engaging and motivational topic for a 55-second Hindi YouTube short "
-    "about famous personalities, historical figures, scientists, or innovators. "
+    "about famous personalities, historical figures, scientists, or innovators.Keep it concise for narration only, no extra lines "
     "Avoid repeating topics from the following list:\n" + ", ".join(used_topics)
 )
 topic_resp = gemini_model.generate_content(topic_prompt)
