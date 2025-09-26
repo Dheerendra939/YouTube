@@ -13,7 +13,6 @@ import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
 import json
-import time
 
 # -----------------------------
 # Settings
@@ -35,7 +34,6 @@ TOPICS = [
     "Subhas Chandra Bose", "Kalpana Chawla", "Albert Einstein", "Nikola Tesla",
     "Mother Teresa", "Martin Luther King Jr", "Steve Jobs", "Elon Musk"
 ]
-
 topic = random.choice(TOPICS)
 print(f"🎯 Selected topic: {topic}")
 
@@ -50,65 +48,85 @@ print("✅ Gemini AI ready!")
 # -----------------------------
 # Step 1: Generate Script
 # -----------------------------
-print(f"📖 Generating 55 sec biography of {topic} in Hindi...")
+print(f"📖 Generating biography of {topic} in Hindi...")
 bio_prompt = f"write a 55 second motivational biography of {topic} in Hindi. Keep it for narration only, no extra lines."
 bio_resp = gemini_model.generate_content(bio_prompt)
 bio_text = bio_resp.text.strip()
 print("✅ Script generated!")
 
 # -----------------------------
-# Step 2: Fetch Images
+# Step 2: Image Fetch (Google → Pexels)
 # -----------------------------
-print("🖼️ Fetching images...")
-PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-pexels_url = "https://api.pexels.com/v1/search"
+def fetch_google_images(query, num=15):
+    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+    GOOGLE_CX = os.environ.get("GOOGLE_CX")
+    if not GOOGLE_API_KEY or not GOOGLE_CX:
+        print("⚠️ Google API key or CX not found.")
+        return []
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {"q": query, "cx": GOOGLE_CX, "key": GOOGLE_API_KEY, "searchType": "image", "num": num}
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return [item["link"] for item in data.get("items", [])]
+        else:
+            print("❌ Google Images API error:", r.text)
+            return []
+    except Exception as e:
+        print("❌ Google fetch failed:", e)
+        return []
 
-headers = {"Authorization": PEXELS_API_KEY}
-images = []
-image_folder = "images"
-os.makedirs(image_folder, exist_ok=True)
+def fetch_images(query, min_required=10):
+    image_folder = "images"
+    os.makedirs(image_folder, exist_ok=True)
+    images = []
 
-try:
-    r = requests.get(pexels_url, headers=headers, params={"query": topic, "per_page": 15}, timeout=10)
-    if r.status_code == 200:
-        data = r.json()
-        for i, photo in enumerate(data.get("photos", [])):
-            img_url = photo["src"]["large"]
-            img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
-            img_data = requests.get(img_url, timeout=10).content
-            with open(img_path, "wb") as f:
-                f.write(img_data)
-            images.append(img_path)
-            print(f"✅ Pexels: {img_path}")
-    else:
-        print(f"❌ Pexels API error: {r.text}")
-except Exception as e:
-    print(f"❌ Pexels fetch failed: {e}")
-
-# Fallback: Wikipedia
-if len(images) < 10:
-    print("⚠️ Not enough images, using Wikipedia fallback...")
-    fallback_urls = [
-        "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
-    ]
-    for i, url in enumerate(fallback_urls):
-        img_path = os.path.join(image_folder, f"wiki_{i}.jpg")
+    # Google first
+    print("🔎 Fetching from Google Images...")
+    google_links = fetch_google_images(query, num=15)
+    for i, url in enumerate(google_links):
         try:
+            img_path = os.path.join(image_folder, f"google_{i}.jpg")
             r = requests.get(url, timeout=10)
             if r.status_code == 200:
                 with open(img_path, "wb") as f:
                     f.write(r.content)
                 images.append(img_path)
-                print(f"✅ Wiki: {img_path}")
         except:
             pass
 
-if len(images) < 10:
-    raise Exception("❌ No images available. Need at least 10.")
+    # Pexels fallback
+    if len(images) < min_required:
+        print("📸 Falling back to Pexels...")
+        PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+        if PEXELS_API_KEY:
+            headers = {"Authorization": PEXELS_API_KEY}
+            pexels_url = "https://api.pexels.com/v1/search"
+            try:
+                r = requests.get(pexels_url, headers=headers, params={"query": query, "per_page": 15}, timeout=10)
+                if r.status_code == 200:
+                    data = r.json()
+                    for i, photo in enumerate(data.get("photos", [])):
+                        img_url = photo["src"]["large"]
+                        img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
+                        img_data = requests.get(img_url, timeout=10).content
+                        with open(img_path, "wb") as f:
+                            f.write(img_data)
+                        images.append(img_path)
+                else:
+                    print(f"❌ Pexels API error: {r.text}")
+            except Exception as e:
+                print(f"❌ Pexels fetch failed: {e}")
+
+    if len(images) < min_required:
+        raise Exception("❌ Not enough images (need at least 10).")
+
+    return images
+
+print("🖼️ Fetching images...")
+images = fetch_images(topic, min_required=10)
+print(f"✅ Got {len(images)} images")
 
 # -----------------------------
 # Step 3: Create Video
@@ -192,7 +210,6 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-# Auto description + tags
 safe_description = (
     f"{topic} की प्रेरणादायक 55 सेकंड जीवनी। "
     f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
