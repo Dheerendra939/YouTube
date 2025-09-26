@@ -2,8 +2,8 @@ name: Auto YouTube Shorts Generator
 
 on:
   schedule:
-    - cron: "*/1 * * * *"   # every 2 hours
-  workflow_dispatch:
+    - cron: "0 */2 * * *"   # every 2 hours
+  workflow_dispatch:        # allow manual trigger
 
 jobs:
   build-and-upload:
@@ -18,19 +18,25 @@ jobs:
       YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - run: |
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install google-generativeai pillow opencv-python-headless ffmpeg-python requests \
-            google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 numpy
+            google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 numpy \
+            google-cloud-texttospeech
 
-      - run: |
+      - name: Install ffmpeg
+        run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - run: python generate_and_upload.py
+      - name: Run script
+        run: python generate_and_upload.py
