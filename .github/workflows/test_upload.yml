@@ -38,5 +38,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
+      - name: Restore used_topics cache
+        uses: actions/cache@v3
+        with:
+          path: used_topics.json
+          key: used-topics-cache
+
       - name: Run script
         run: python generate_and_upload.py
+
+      - name: Save used_topics cache
+        uses: actions/cache@v3
+        with:
+          path: used_topics.json
+          key: used-topics-cache
