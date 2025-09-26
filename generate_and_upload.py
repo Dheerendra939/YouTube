@@ -58,13 +58,13 @@ print("✅ Script generated!")
 # Step 2: Image Fetch (Google → Pexels)
 # -----------------------------
 def fetch_google_images(query, num=15):
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+    GOOGLE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
     GOOGLE_CX = os.environ.get("GOOGLE_CX")
-    if not GOOGLE_API_KEY or not GOOGLE_CX:
+    if not YOUTUBE_API_KEY or not GOOGLE_CX:
         print("⚠️ Google API key or CX not found.")
         return []
     url = "https://www.googleapis.com/customsearch/v1"
-    params = {"q": query, "cx": GOOGLE_CX, "key": GOOGLE_API_KEY, "searchType": "image", "num": num}
+    params = {"q": query, "cx": GOOGLE_CX, "key": YOUTUBE_API_KEY, "searchType": "image", "num": num}
     try:
         r = requests.get(url, params=params, timeout=10)
         if r.status_code == 200:
