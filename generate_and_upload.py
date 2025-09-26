@@ -1,194 +1,223 @@
-import os, random, requests, json, re, textwrap, subprocess, math
+import os
+import cv2
+import random
+import subprocess
+import requests
+import numpy as np
 import google.generativeai as genai
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from google.cloud import texttospeech
+from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 import google.auth.transport.requests
+from PIL import Image, ImageDraw, ImageFont
+from textwrap import wrap
+import json
+import time
 
-# ======================
-# CONFIG
-# ======================
-VIDEO_LENGTH = 55
-IMAGE_COUNT = 10
-AUDIO_FILE = "voice.mp3"
-OUTPUT_FILE = "final.mp4"
+# -----------------------------
+# Settings
+# -----------------------------
+WIDTH, HEIGHT = 720, 1280
+FPS = 24
+VIDEO_FILENAME = "video.mp4"
+AUDIO_FILENAME = "audio.mp3"
+FINAL_FILENAME = "short_final.mp4"
+VIDEO_DURATION = random.randint(50, 59)  # 50–59 sec
+FONT_PATH = "NotoSans-Devanagari.ttf"
 
-# ======================
-# GEMINI HELPERS
-# ======================
-def pick_topic():
-    topics = [
-        "प्रसिद्ध व्यक्तित्व", "विज्ञान की खोजें",
-        "प्रेरणादायक जीवन कथाएँ", "ऐतिहासिक घटनाएँ",
-        "दुनिया के रोचक तथ्य", "प्रेरक विचार"
+# -----------------------------
+# Topics for shorts
+# -----------------------------
+TOPICS = [
+    "Mahatma Gandhi", "Swami Vivekananda", "APJ Abdul Kalam", "Bhagat Singh",
+    "Rani Lakshmibai", "Chanakya", "Rabindranath Tagore", "Sardar Vallabhbhai Patel",
+    "Subhas Chandra Bose", "Kalpana Chawla", "Albert Einstein", "Nikola Tesla",
+    "Mother Teresa", "Martin Luther King Jr", "Steve Jobs", "Elon Musk"
+]
+
+topic = random.choice(TOPICS)
+print(f"🎯 Selected topic: {topic}")
+
+# -----------------------------
+# Gemini AI Setup
+# -----------------------------
+print("🔧 Setting up Gemini AI...")
+genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+gemini_model = genai.GenerativeModel("gemini-2.5-flash")
+print("✅ Gemini AI ready!")
+
+# -----------------------------
+# Step 1: Generate Script
+# -----------------------------
+print(f"📖 Generating 55 sec biography of {topic} in Hindi...")
+bio_prompt = f"write a 55 second motivational biography of {topic} in Hindi. Keep it for narration only, no extra lines."
+bio_resp = gemini_model.generate_content(bio_prompt)
+bio_text = bio_resp.text.strip()
+print("✅ Script generated!")
+
+# -----------------------------
+# Step 2: Fetch Images
+# -----------------------------
+print("🖼️ Fetching images...")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+pexels_url = "https://api.pexels.com/v1/search"
+
+headers = {"Authorization": PEXELS_API_KEY}
+images = []
+image_folder = "images"
+os.makedirs(image_folder, exist_ok=True)
+
+try:
+    r = requests.get(pexels_url, headers=headers, params={"query": topic, "per_page": 15}, timeout=10)
+    if r.status_code == 200:
+        data = r.json()
+        for i, photo in enumerate(data.get("photos", [])):
+            img_url = photo["src"]["large"]
+            img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
+            img_data = requests.get(img_url, timeout=10).content
+            with open(img_path, "wb") as f:
+                f.write(img_data)
+            images.append(img_path)
+            print(f"✅ Pexels: {img_path}")
+    else:
+        print(f"❌ Pexels API error: {r.text}")
+except Exception as e:
+    print(f"❌ Pexels fetch failed: {e}")
+
+# Fallback: Wikipedia
+if len(images) < 10:
+    print("⚠️ Not enough images, using Wikipedia fallback...")
+    fallback_urls = [
+        "https://upload.wikimedia.org/wikipedia/commons/d/d1/Portrait_Gandhi.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/1/1e/Gandhi_seated.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/9/91/Gandhi_laughing.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/7/72/Gandhi_Spinning_Wheel.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/0/0e/Mahatma_Gandhi_1942.jpg"
     ]
-    base_topic = random.choice(topics)
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-pro")
-    resp = model.generate_content(
-        f"Suggest one engaging Hindi topic (3-4 words) for a 1-minute YouTube Short about {base_topic}."
-    )
-    return resp.text.strip()
+    for i, url in enumerate(fallback_urls):
+        img_path = os.path.join(image_folder, f"wiki_{i}.jpg")
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                with open(img_path, "wb") as f:
+                    f.write(r.content)
+                images.append(img_path)
+                print(f"✅ Wiki: {img_path}")
+        except:
+            pass
 
-def generate_script(topic):
-    model = genai.GenerativeModel("gemini-pro")
-    resp = model.generate_content(
-        f"Write an engaging 55-second motivational short script in Hindi about {topic}. "
-        "Keep it simple, inspiring, and suitable for narration."
-    )
-    return resp.text.strip()
+if len(images) < 10:
+    raise Exception("❌ No images available. Need at least 10.")
 
-def generate_metadata(topic, script):
-    model = genai.GenerativeModel("gemini-pro")
-    prompt = (
-        f"Generate YouTube metadata for a Hindi Shorts video.\n"
-        f"Topic: {topic}\n\n"
-        f"Script: {script}\n\n"
-        f"Return JSON with fields: title, description, tags (20 Hindi/English mix, trending, relevant)."
-    )
-    resp = model.generate_content(prompt)
-    try:
-        data = json.loads(resp.text)
-    except:
-        # fallback if Gemini outputs plain text
-        data = {
-            "title": f"{topic} | प्रेरणादायक कहानी #Shorts",
-            "description": script[:4500] + "\n\n#Shorts #Motivation #Inspiration",
-            "tags": [
-                "Motivation", "Shorts", "Inspiration", "Life Lessons",
-                "Hindi Motivation", "History", "Personality", "Education",
-                "Learning", "Success", "Struggle", "Motivational Video",
-                "Hindi Shorts", "Knowledge", "Wisdom", "Great Leaders",
-                "Facts", "Biography", "Motivational Shorts", "Inspiring Stories"
-            ]
-        }
-    return data
+# -----------------------------
+# Step 3: Create Video
+# -----------------------------
+print("🎬 Creating video...")
+video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
 
-# ======================
-# PEXELS IMAGES
-# ======================
-def fetch_images(query):
-    headers = {"Authorization": os.environ["PEXELS_API_KEY"]}
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page={IMAGE_COUNT}"
-    r = requests.get(url, headers=headers)
-    if r.status_code != 200:
-        print("❌ Pexels API error:", r.text)
-        return []
-    data = r.json()
-    images = [photo["src"]["large"] for photo in data.get("photos", [])]
-    while len(images) < IMAGE_COUNT and len(images) > 0:
-        images.append(random.choice(images))
-    return images
+font_size = 36
+try:
+    font = ImageFont.truetype(FONT_PATH, font_size)
+except IOError:
+    print(f"❌ Font not found: {FONT_PATH}")
+    exit()
 
-# ======================
-# GOOGLE TTS
-# ======================
-def generate_audio(text):
-    creds_info = json.loads(os.environ["TTS"])
-    creds = service_account.Credentials.from_service_account_info(creds_info)
-    tts_client = texttospeech.TextToSpeechClient(credentials=creds)
-    synthesis_input = texttospeech.SynthesisInput(text=text)
-    voice = texttospeech.VoiceSelectionParams(language_code="hi-IN", ssml_gender=texttospeech.SsmlVoiceGender.MALE)
-    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3, pitch=-6)
-    response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-    with open(AUDIO_FILE, "wb") as f:
-        f.write(response.audio_content)
-    print("✅ Audio generated!")
+wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
+total_lines = len(wrapped_lines)
+frames_per_line = (VIDEO_DURATION * FPS) // total_lines
 
-# ======================
-# VIDEO CREATION
-# ======================
-def create_video(images, text, audio_file, output_file):
-    per_image = VIDEO_LENGTH / len(images)
-    wrapped = textwrap.fill(text, width=40)
-    lines = wrapped.split("\n")
-    step = math.floor(VIDEO_LENGTH / len(lines))
-    caption_file = "captions.srt"
-    with open(caption_file, "w", encoding="utf-8") as f:
-        t = 0
-        for i, line in enumerate(lines, 1):
-            f.write(f"{i}\n")
-            f.write(f"00:00:{t:02d},000 --> 00:00:{t+step:02d},000\n")
-            f.write(line + "\n\n")
-            t += step
+for i, line in enumerate(wrapped_lines):
+    img_file = images[i % len(images)]
+    img_base = Image.open(img_file).resize((WIDTH, HEIGHT))
+    img = img_base.copy()
+    draw = ImageDraw.Draw(img)
 
-    local_images = []
-    for i, url in enumerate(images):
-        fname = f"img_{i}.jpg"
-        r = requests.get(url, timeout=15)
-        with open(fname, "wb") as f:
-            f.write(r.content)
-        local_images.append(fname)
+    bbox = font.getbbox(line)
+    line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pos = ((WIDTH - line_w) // 2, HEIGHT - 200)
+    draw.text(pos, line, font=font, fill=(255, 255, 255))
 
-    inputs = []
-    for img in local_images:
-        inputs.extend(["-loop", "1", "-t", str(per_image), "-i", img])
+    overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    for _ in range(frames_per_line):
+        video.write(overlay_cv2)
 
-    ffmpeg_cmd = [
-        "ffmpeg", *inputs,
-        "-i", audio_file,
-        "-filter_complex",
-        f"concat=n={len(local_images)}:v=1:a=0,subtitles={caption_file}",
-        "-c:v", "libx264", "-t", str(VIDEO_LENGTH),
-        "-pix_fmt", "yuv420p", "-shortest", output_file, "-y"
-    ]
-    subprocess.run(ffmpeg_cmd, check=True)
-    print("✅ Video created!")
+video.release()
+print("✅ Video created!")
 
-# ======================
-# YOUTUBE UPLOAD
-# ======================
-def upload_to_youtube(meta):
-    from google.oauth2.credentials import Credentials
-    CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
-    CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
-    REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+# -----------------------------
+# Step 4: Generate TTS
+# -----------------------------
+print("🎙️ Generating Hindi voiceover...")
+tts_json = os.environ["TTS"]
+credentials_info = json.loads(tts_json)
+credentials = service_account.Credentials.from_service_account_info(credentials_info)
+tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
 
-    creds = Credentials(
-        None,
-        refresh_token=REFRESH_TOKEN,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET,
-    )
-    creds.refresh(google.auth.transport.requests.Request())
-    youtube = build("youtube", "v3", credentials=creds)
+synthesis_input = texttospeech.SynthesisInput(text=bio_text)
+voice = texttospeech.VoiceSelectionParams(language_code="hi-IN", ssml_gender=texttospeech.SsmlVoiceGender.MALE)
+audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3, pitch=-6)
 
-    body = {
+response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+with open(AUDIO_FILENAME, "wb") as f:
+    f.write(response.audio_content)
+print("✅ Voiceover ready!")
+
+# -----------------------------
+# Step 5: Merge Video + Audio
+# -----------------------------
+print("🔀 Merging video + audio...")
+subprocess.run([
+    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
+    "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
+], check=True)
+print("✅ Final video ready!")
+
+# -----------------------------
+# Step 6: Upload to YouTube
+# -----------------------------
+print("📤 Uploading to YouTube...")
+
+CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
+CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
+REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+
+creds = Credentials(
+    None,
+    refresh_token=REFRESH_TOKEN,
+    token_uri="https://oauth2.googleapis.com/token",
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET
+)
+creds.refresh(google.auth.transport.requests.Request())
+youtube = build("youtube", "v3", credentials=creds)
+
+# Auto description + tags
+safe_description = (
+    f"{topic} की प्रेरणादायक 55 सेकंड जीवनी। "
+    "इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
+    "#Shorts #Motivation #History"
+)
+
+tags = [
+    topic, "जीवनी", "Motivation", "Success", "Inspiration", "India", "History",
+    "Biography", "Life Story", "Leadership", "Quotes", "Legacy",
+    "Famous People", "Education", "Struggle", "Shorts", "Hindi", "ज्ञान", "Learning", "Wisdom"
+]
+
+request = youtube.videos().insert(
+    part="snippet,status",
+    body={
         "snippet": {
-            "title": meta["title"],
-            "description": meta["description"],
-            "tags": meta["tags"],
+            "title": f"{topic} की 55 सेकंड प्रेरणादायक जीवनी #Shorts",
+            "description": safe_description[:4500],
+            "tags": tags,
             "categoryId": "22"
         },
         "status": {"privacyStatus": "public"}
-    }
+    },
+    media_body=FINAL_FILENAME
+)
 
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body=body,
-        media_body=OUTPUT_FILE
-    )
-    response = request.execute()
-    print(f"✅ Upload complete! https://www.youtube.com/watch?v={response['id']}")
-
-# ======================
-# MAIN
-# ======================
-if __name__ == "__main__":
-    topic = pick_topic()
-    print(f"🎯 Topic: {topic}")
-
-    script = generate_script(topic)
-    print("📖 Script ready!")
-
-    meta = generate_metadata(topic, script)
-    print("📝 Metadata generated!")
-
-    images = fetch_images(topic)
-    if not images:
-        raise Exception("❌ No images from Pexels.")
-
-    generate_audio(script)
-    create_video(images, script, AUDIO_FILE, OUTPUT_FILE)
-    upload_to_youtube(meta)
+response = request.execute()
+print(f"✅ Upload complete! Video: https://www.youtube.com/watch?v={response['id']}")
