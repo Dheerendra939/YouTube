@@ -12,6 +12,8 @@ jobs:
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_CX: ${{ secrets.GOOGLE_CX }}
       TTS: ${{ secrets.TTS }}
       YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
       YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -35,6 +37,11 @@ jobs:
 
       - name: Install ffmpeg
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Run script
+        run: python generate_and_upload.py        run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
