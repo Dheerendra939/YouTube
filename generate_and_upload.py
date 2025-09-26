@@ -25,19 +25,16 @@ AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
 VIDEO_DURATION = random.randint(50, 59)  # 50–59 sec
 FONT_PATH = "NotoSans-Devanagari.ttf"
+USED_TOPICS_FILE = os.path.join(os.environ.get("GITHUB_WORKSPACE", "."), "used_topics.json")
 
 # -----------------------------
-# Topics for shorts
+# Load used topics
 # -----------------------------
-TOPICS = [
-    "Mahatma Gandhi", "Swami Vivekananda", "APJ Abdul Kalam", "Bhagat Singh",
-    "Rani Lakshmibai", "Chanakya", "Rabindranath Tagore", "Sardar Vallabhbhai Patel",
-    "Subhas Chandra Bose", "Kalpana Chawla", "Albert Einstein", "Nikola Tesla",
-    "Mother Teresa", "Martin Luther King Jr", "Steve Jobs", "Elon Musk"
-]
-
-topic = random.choice(TOPICS)
-print(f"🎯 Selected topic: {topic}")
+if os.path.exists(USED_TOPICS_FILE):
+    with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
+        used_topics = json.load(f)
+else:
+    used_topics = []
 
 # -----------------------------
 # Gemini AI Setup
@@ -48,10 +45,29 @@ gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 print("✅ Gemini AI ready!")
 
 # -----------------------------
+# Generate new topic
+# -----------------------------
+print("🎯 Generating new engaging topic...")
+topic_prompt = (
+    "Generate one highly engaging and motivational topic for a 55-second Hindi YouTube short "
+    "about famous personalities, historical figures, scientists, or innovators. "
+    "Avoid repeating topics from the following list:\n" + ", ".join(used_topics)
+)
+topic_resp = gemini_model.generate_content(topic_prompt)
+topic = topic_resp.text.strip()
+print(f"🆕 Selected topic: {topic}")
+
+# Update used topics
+used_topics.append(topic)
+used_topics = used_topics[-1000:]  # keep last 1000 topics
+with open(USED_TOPICS_FILE, "w", encoding="utf-8") as f:
+    json.dump(used_topics, f, ensure_ascii=False, indent=2)
+
+# -----------------------------
 # Step 1: Generate Script
 # -----------------------------
 print(f"📖 Generating 55 sec biography of {topic} in Hindi...")
-bio_prompt = f"write a 55 second motivational biography of {topic} in Hindi. Keep it for narration only, no extra lines."
+bio_prompt = f"Write a 55-second motivational biography of {topic} in Hindi. Keep it concise for narration only, no extra lines."
 bio_resp = gemini_model.generate_content(bio_prompt)
 bio_text = bio_resp.text.strip()
 print("✅ Script generated!")
@@ -192,10 +208,9 @@ creds = Credentials(
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
-# Auto description + tags
 safe_description = (
     f"{topic} की प्रेरणादायक 55 सेकंड जीवनी। "
-    "इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
+    f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
     "#Shorts #Motivation #History"
 )
 
