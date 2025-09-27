@@ -36,18 +36,18 @@ os.makedirs("images", exist_ok=True)
 
 def get_next_topic():
     with open(TOPICS_FILE, "r", encoding="utf-8") as f:
-        topics = [line.strip() for line in f if line.strip()]
+        all_topics = [line.strip() for line in f if line.strip()]
     if os.path.exists(USED_FILE):
         with open(USED_FILE, "r", encoding="utf-8") as f:
-            used = set(line.strip() for line in f if line.strip())
+            used = set(line.strip() for line in f)
     else:
         used = set()
-    remaining = [t for t in topics if t not in used]
-    if not remaining:
-        print("❌ All topics used! Resetting used.txt")
+    available = [t for t in all_topics if t not in used]
+    if not available:
+        print("❌ No available topics. Reset used.txt")
+        available = all_topics
         open(USED_FILE, "w").close()
-        remaining = topics
-    topic = random.choice(remaining)
+    topic = random.choice(available)
     with open(USED_FILE, "a", encoding="utf-8") as f:
         f.write(topic + "\n")
     return topic
@@ -82,35 +82,26 @@ PEXELS_KEY = os.getenv("PEXELS_API_KEY")
 def fetch_google_images(query, num=10):
     images = []
     try:
-        if not GOOGLE_KEY or not GOOGLE_CX:
-            return []
         url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "q": query, "cx": GOOGLE_CX, "key": GOOGLE_KEY,
-            "searchType": "image", "num": num, "imgSize": "large", "safe": "high"
-        }
+        params = {"q": query, "cx": GOOGLE_CX, "key": GOOGLE_KEY,
+                  "searchType": "image", "num": num, "imgSize": "large", "safe": "high"}
         r = requests.get(url, params=params)
         data = r.json()
-        if "items" not in data:
-            return []
-        for idx, item in enumerate(data["items"]):
+        for idx, item in enumerate(data.get("items", [])):
             link = item.get("link")
+            if not link: continue
             try:
                 img = requests.get(link, timeout=10)
                 fname = f"images/google_{idx}.jpg"
-                with open(fname, "wb") as f:
-                    f.write(img.content)
-                if os.path.getsize(fname) > 1024:
-                    images.append(fname)
-            except: continue
+                with open(fname, "wb") as f: f.write(img.content)
+                if os.path.getsize(fname) > 1024: images.append(fname)
+            except: pass
     except: pass
     return images
 
 def fetch_pexels_images(query, num=10):
     images = []
     try:
-        if not PEXELS_KEY:
-            return []
         headers = {"Authorization": PEXELS_KEY}
         url = "https://api.pexels.com/v1/search"
         params = {"query": query, "per_page": num}
@@ -121,73 +112,67 @@ def fetch_pexels_images(query, num=10):
             try:
                 img = requests.get(link, timeout=10)
                 fname = f"images/pexels_{idx}.jpg"
-                with open(fname, "wb") as f:
-                    f.write(img.content)
-                if os.path.getsize(fname) > 1024:
-                    images.append(fname)
-            except: continue
+                with open(fname, "wb") as f: f.write(img.content)
+                if os.path.getsize(fname) > 1024: images.append(fname)
+            except: pass
     except: pass
     return images
 
 def get_images(query, num=10):
     images = fetch_google_images(query, num)
-    if len(images) < num:
-        extra = fetch_pexels_images(query, num - len(images))
-        images.extend(extra)
-    if len(images) < 3:
-        raise Exception(f"❌ Not enough images for {topic}")
-    return images[:num]
+    if len(images) < num: images += fetch_pexels_images(query, num-len(images))
+    if len(images) < 5: raise Exception("❌ Not enough images")
+    print(f"✅ Got {len(images)} images")
+    return images
 
-images = get_images(topic, num=10)
+images = get_images(topic, 10)
 
 # -----------------------------
-# Step 3: Generate TTS audio first
+# Helper: crop image to fill frame
+# -----------------------------
+def crop_to_frame(img, width, height):
+    img = img.convert("RGB")
+    im_w, im_h = img.size
+    target_ratio = width / height
+    img_ratio = im_w / im_h
+    if img_ratio > target_ratio:
+        new_w = int(im_h * target_ratio)
+        left = (im_w - new_w) // 2
+        img = img.crop((left,0,left+new_w,im_h))
+    else:
+        new_h = int(im_w / target_ratio)
+        top = (im_h - new_h) // 2
+        img = img.crop((0,top,im_w,top+new_h))
+    return img.resize((width,height))
+
+# -----------------------------
+# Step 3: Generate TTS
 # -----------------------------
 print("🎙️ Generating Hindi voiceover...")
 tts_json = os.environ["TTS"]
 credentials_info = json.loads(tts_json)
 credentials = service_account.Credentials.from_service_account_info(credentials_info)
 tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
-
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(language_code="hi-IN", ssml_gender=texttospeech.SsmlVoiceGender.MALE)
 audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3, pitch=-6)
-
 response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-with open(AUDIO_FILENAME, "wb") as f:
-    f.write(response.audio_content)
+with open(AUDIO_FILENAME, "wb") as f: f.write(response.audio_content)
 print("✅ Voiceover ready!")
 
 voiceover = AudioSegment.from_file(AUDIO_FILENAME)
-audio_duration = voiceover.duration_seconds
+audio_duration = len(voiceover)/1000.0
 frames_total = int(audio_duration * FPS)
 
 # -----------------------------
-# Helper: crop and zoom effect
+# Step 4: Create Video with zoom effect
 # -----------------------------
-def crop_to_frame(img, width, height):
-    im_w, im_h = img.size
-    aspect_target = width / height
-    aspect_img = im_w / im_h
-    if aspect_img > aspect_target:
-        new_w = int(im_h * aspect_target)
-        left = (im_w - new_w) // 2
-        img = img.crop((left, 0, left + new_w, im_h))
-    else:
-        new_h = int(im_w / aspect_target)
-        top = (im_h - new_h) // 2
-        img = img.crop((0, top, im_w, top + new_h))
-    return img.resize((width, height))
-
-# -----------------------------
-# Step 4: Create Video
-# -----------------------------
-print("🎬 Creating video with zoom effect...")
+print("🎬 Creating video with zoom effect matching narration length...")
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
+try: font = ImageFont.truetype(FONT_PATH, 36)
+except: exit("❌ Font not found")
 
-font_size = 36
-font = ImageFont.truetype(FONT_PATH, font_size)
-wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
+wrapped_lines = wrap(bio_text, width=30)
 total_lines = len(wrapped_lines)
 frames_per_line = max(1, frames_total // total_lines)
 
@@ -195,21 +180,20 @@ for i, line in enumerate(wrapped_lines):
     img_file = images[i % len(images)]
     img_base = Image.open(img_file)
     img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
-
     for f in range(frames_per_line):
-        zoom = 1 + 0.02 * (f / frames_per_line)  # small zoom in
-        w, h = img_base.size
-        crop_w, crop_h = int(WIDTH / zoom), int(HEIGHT / zoom)
-        left = (w - crop_w)//2
-        top = (h - crop_h)//2
-        img = img_base.crop((left, top, left+crop_w, top+crop_h)).resize((WIDTH, HEIGHT))
-        draw = ImageDraw.Draw(img)
+        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_line)  # zoom in/out
+        w,h = int(WIDTH*zoom), int(HEIGHT*zoom)
+        img = img_base.resize((w,h))
+        left = (w-WIDTH)//2
+        top = (h-HEIGHT)//2
+        img_cropped = img.crop((left,top,left+WIDTH,top+HEIGHT)).convert("RGB")
+        draw = ImageDraw.Draw(img_cropped)
         bbox = font.getbbox(line)
         line_w, line_h = bbox[2]-bbox[0], bbox[3]-bbox[1]
-        pos = ((WIDTH - line_w)//2, HEIGHT - line_h - 50)
+        pos = ((WIDTH-line_w)//2, HEIGHT-line_h-50)
         draw.text((pos[0]+2,pos[1]+2), line, font=font, fill=(0,0,0))  # shadow
         draw.text(pos, line, font=font, fill=(255,255,255))
-        frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        frame = cv2.cvtColor(np.array(img_cropped), cv2.COLOR_RGB2BGR)
         video.write(frame)
 
 video.release()
@@ -219,10 +203,8 @@ print("✅ Video created!")
 # Step 5: Add Background Music
 # -----------------------------
 print("🎵 Adding background music...")
-bgm = AudioSegment.from_file(BGM_PATH) - 12
-# loop or trim
-if len(bgm) < len(voiceover):
-    bgm = bgm * (len(voiceover)//len(bgm)+1)
+bgm = AudioSegment.from_file(BGM_PATH)-12
+if len(bgm) < len(voiceover): bgm = bgm * (len(voiceover)//len(bgm)+1)
 bgm = bgm[:len(voiceover)]
 final_audio = voiceover.overlay(bgm)
 final_audio.export(AUDIO_FILENAME, format="mp3")
@@ -233,8 +215,8 @@ print("✅ Background music added!")
 # -----------------------------
 print("🔀 Merging video + audio...")
 subprocess.run([
-    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
-    "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
+    "ffmpeg","-y","-i",VIDEO_FILENAME,"-i",AUDIO_FILENAME,
+    "-c:v","copy","-c:a","aac",FINAL_FILENAME
 ], check=True)
 print("✅ Final video ready!")
 
@@ -245,31 +227,26 @@ print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
-
-creds = Credentials(
-    None,
-    refresh_token=REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET
-)
+creds = Credentials(None, refresh_token=REFRESH_TOKEN,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
 creds.refresh(google.auth.transport.requests.Request())
-youtube = build("youtube", "v3", credentials=creds)
+youtube = build("youtube","v3",credentials=creds)
 
-safe_description = f"Life of {topic} ❤️❤️❤️❤️ इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n#Shorts #Motivation #History"
-tags = [topic, "जीवनी", "Motivation", "Success", "Inspiration", "India", "History", "Biography", "Life Story", "Leadership", "Quotes", "Legacy", "Famous People", "Education", "Struggle", "Shorts", "Hindi", "ज्ञान", "Learning", "Wisdom"]
+safe_description = (f"Life of {topic} ❤️❤️❤️❤️ "
+                    f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
+                    "#Shorts #Motivation #History")
+tags = [topic,"जीवनी","Motivation","Success","Inspiration","India","History","Biography",
+        "Life Story","Leadership","Quotes","Legacy","Famous People","Education","Struggle",
+        "Shorts","Hindi","ज्ञान","Learning","Wisdom"]
 
 request = youtube.videos().insert(
     part="snippet,status",
-    body={
-        "snippet": {
-            "title": f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
-            "description": safe_description[:4500],
-            "tags": tags,
-            "categoryId": "22"
-        },
-        "status": {"privacyStatus": "public"}
-    },
+    body={"snippet":{"title":f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
+                     "description":safe_description[:4500],
+                     "tags":tags,
+                     "categoryId":"22"},
+          "status":{"privacyStatus":"public"}},
     media_body=FINAL_FILENAME
 )
 response = request.execute()
