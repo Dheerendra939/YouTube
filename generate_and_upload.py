@@ -56,93 +56,125 @@ print("✅ Script generated!")
 
 # -----------------------------
 # -----------------------------
-# Step 2: Fetch Images (Google first, fallback Pexels)
-# -----------------------------
-print("🖼️ Fetching images...")
-PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-images = []
-image_folder = "images"
-os.makedirs(image_folder, exist_ok=True)
+# =========================
+# STEP 2: Fetch Images
+# =========================
+import requests, os, imghdr, traceback
 
-import imghdr
+GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CX = os.getenv("GOOGLE_CX")
+PEXELS_KEY = os.getenv("PEXELS_API_KEY")
 
-def download_and_validate(img_url, save_path):
-    """Download image and validate it’s real (jpg/png)."""
+os.makedirs("images", exist_ok=True)
+
+def fetch_google_images(query, num=10):
+    print("🔎 Fetching from Google Custom Search...")
+    images = []
     try:
-        r = requests.get(img_url, timeout=10, stream=True)
-        if r.status_code == 200:
-            with open(save_path, "wb") as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
+        if not GOOGLE_KEY or not GOOGLE_CX:
+            print("❌ Missing GOOGLE_API_KEY or GOOGLE_CX in environment variables")
+            return []
 
-            # Validate image format
-            if imghdr.what(save_path) in ["jpeg", "png", "jpg"]:
-                return True
-            else:
-                print(f"⚠️ Skipping invalid file (not an image): {img_url}")
-                os.remove(save_path)
-                return False
-        else:
-            print(f"⚠️ Failed to fetch {img_url} ({r.status_code})")
-            return False
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "q": query,
+            "cx": GOOGLE_CX,
+            "key": GOOGLE_KEY,
+            "searchType": "image",
+            "num": num,
+            "imgSize": "large",
+            "safe": "high"
+        }
+
+        r = requests.get(url, params=params)
+        data = r.json()
+
+        # Handle API errors
+        if "error" in data:
+            print("❌ Google API Error:", data["error"].get("message", "Unknown error"))
+            return []
+
+        if "items" not in data:
+            print("⚠️ Google returned no items:", data)
+            return []
+
+        # Download images
+        for idx, item in enumerate(data["items"]):
+            link = item.get("link")
+            if not link:
+                continue
+            try:
+                img = requests.get(link, timeout=10)
+                fname = f"images/google_{idx}.jpg"
+                with open(fname, "wb") as f:
+                    f.write(img.content)
+                if imghdr.what(fname):
+                    print(f"✅ Google: {fname}")
+                    images.append(fname)
+                else:
+                    print(f"⚠️ Invalid image skipped: {fname}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch {link}: {e}")
     except Exception as e:
-        print(f"⚠️ Error downloading {img_url}: {e}")
-        return False
+        print("❌ Exception in Google fetch:", e)
+        traceback.print_exc()
+
+    return images
 
 
-# --- Try Google Custom Search ---
-try:
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
-    GOOGLE_CX = os.environ.get("GOOGLE_CX")
-
-    if GOOGLE_API_KEY and GOOGLE_CX:
-        print("🔎 Fetching from Google Images...")
-        google_url = (
-            f"https://www.googleapis.com/customsearch/v1?q={topic}"
-            f"&cx={GOOGLE_CX}&searchType=image&num=15&key={GOOGLE_API_KEY}"
-        )
-        r = requests.get(google_url, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            for i, item in enumerate(data.get("items", [])):
-                img_url = item["link"]
-                img_path = os.path.join(image_folder, f"google_{i}.jpg")
-                if download_and_validate(img_url, img_path):
-                    images.append(img_path)
-                    print(f"✅ Google: {img_path}")
-        else:
-            print(f"❌ Google Images API error: {r.text}")
-    else:
-        print("⚠️ Google API key or CX not set. Skipping Google fetch.")
-except Exception as e:
-    print(f"❌ Google fetch failed: {e}")
-
-
-# --- Fallback: Pexels if <10 valid images ---
-if len(images) < 10:
-    print("📸 Falling back to Pexels...")
-    headers = {"Authorization": PEXELS_API_KEY}
-    pexels_url = "https://api.pexels.com/v1/search"
+def fetch_pexels_images(query, num=10):
+    print("📸 Fetching from Pexels...")
+    images = []
     try:
-        r = requests.get(pexels_url, headers=headers, params={"query": topic, "per_page": 15}, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            for i, photo in enumerate(data.get("photos", [])):
-                img_url = photo["src"]["large"]
-                img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
-                if download_and_validate(img_url, img_path):
-                    images.append(img_path)
-                    print(f"✅ Pexels: {img_path}")
-        else:
-            print(f"❌ Pexels API error: {r.text}")
+        if not PEXELS_KEY:
+            print("❌ Missing PEXELS_API_KEY in environment variables")
+            return []
+
+        headers = {"Authorization": PEXELS_KEY}
+        url = "https://api.pexels.com/v1/search"
+        params = {"query": query, "per_page": num}
+
+        r = requests.get(url, headers=headers, params=params)
+        data = r.json()
+
+        if "photos" not in data:
+            print("⚠️ Pexels returned no photos:", data)
+            return []
+
+        for idx, photo in enumerate(data["photos"]):
+            link = photo["src"]["large"]
+            try:
+                img = requests.get(link, timeout=10)
+                fname = f"images/pexels_{idx}.jpg"
+                with open(fname, "wb") as f:
+                    f.write(img.content)
+                if imghdr.what(fname):
+                    print(f"✅ Pexels: {fname}")
+                    images.append(fname)
+                else:
+                    print(f"⚠️ Invalid image skipped: {fname}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch {link}: {e}")
     except Exception as e:
-        print(f"❌ Pexels fetch failed: {e}")
+        print("❌ Exception in Pexels fetch:", e)
+        traceback.print_exc()
 
-# --- Final Check ---
-if len(images) < 10:
-    raise Exception("❌ Not enough valid images. Need at least 10.")
+    return images
 
-print(f"✅ Got {len(images)} valid images")
+
+def get_images(query, num=10):
+    images = fetch_google_images(query, num)
+
+    if len(images) < num:
+        print(f"⚠️ Only got {len(images)} from Google, trying Pexels...")
+        extra = fetch_pexels_images(query, num - len(images))
+        images.extend(extra)
+
+    if len(images) < 5:
+        raise Exception(f"❌ Not enough images. Needed {num}, got {len(images)}")
+
+    print(f"✅ Got {len(images)} valid images")
+    return images
 # -----------------------------
 # Step 3: Create Video
 # -----------------------------
