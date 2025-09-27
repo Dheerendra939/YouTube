@@ -2,8 +2,9 @@ name: Auto YouTube Shorts Generator
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours
-  workflow_dispatch:        # allow manual trigger
+    - cron: "0 0-23/2 * * *"   # every 2 hours (00:00, 02:00, 04:00...)
+    - cron: "36 1-23/2 * * *"  # +96 minutes offset (01:36, 03:36, 05:36...)
+  workflow_dispatch:            # allow manual trigger
 
 jobs:
   build-and-upload:
