@@ -1,10 +1,12 @@
+google-generativeai
+pillow
 opencv-python-headless
-numpy
-Pillow
+ffmpeg-python
 requests
 google-api-python-client
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
+numpy
 google-cloud-texttospeech
-google-generativeai
+pydub
