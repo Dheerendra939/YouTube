@@ -164,7 +164,10 @@ def crop_to_frame(img, width, height):
 # -----------------------------
 # Step 3: Create Video with zoom
 # -----------------------------
-print("🎬 Creating video with zoom effect...")
+# Step 3: Create Video (match narration length)
+# -----------------------------
+print("🎬 Creating video with zoom effect matching narration length...")
+
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
 
 font_size = 36
@@ -174,21 +177,40 @@ except IOError:
     print(f"❌ Font not found: {FONT_PATH}")
     exit()
 
+# Split text into lines
 wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
 total_lines = len(wrapped_lines)
-frames_total = VIDEO_DURATION * FPS
-frames_per_line = max(1, frames_total // total_lines)
-if DOUBLE_IMAGE_TIME:
-    frames_per_line *= 2
+
+# Get narration duration
+voiceover = AudioSegment.from_file(AUDIO_FILENAME)
+audio_duration = voiceover.duration_seconds
+frames_total = int(audio_duration * FPS)
+
+# Calculate frames per line dynamically
+frames_per_line_list = []
+accum_frames = 0
+for i in range(total_lines):
+    # proportional frames per line
+    if i == total_lines - 1:
+        # last line takes remaining frames
+        frames_per_line_list.append(frames_total - accum_frames)
+    else:
+        frames_per_line = frames_total // total_lines
+        frames_per_line_list.append(frames_per_line)
+        accum_frames += frames_per_line
+
+# Use only required number of images
+images_needed = min(len(wrapped_lines), len(images))
+selected_images = images[:images_needed]
 
 for i, line in enumerate(wrapped_lines):
-    img_file = images[i % len(images)]
+    img_file = selected_images[i % images_needed]
     img_base = Image.open(img_file).convert("RGB")
     img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
 
-    for f in range(frames_per_line):
-        # zoom effect: scale 1.0 -> 1.1 -> 1.0
-        scale = 1.0 + 0.05 * np.sin(np.pi * f / frames_per_line)
+    for f in range(frames_per_line_list[i]):
+        # zoom in/out effect
+        scale = 1.0 + 0.05 * np.sin(np.pi * f / frames_per_line_list[i])
         new_w, new_h = int(WIDTH * scale), int(HEIGHT * scale)
         img = img_base.resize((new_w, new_h), Image.LANCZOS)
         left = (new_w - WIDTH)//2
@@ -199,6 +221,7 @@ for i, line in enumerate(wrapped_lines):
         bbox = font.getbbox(line)
         line_w, line_h = bbox[2]-bbox[0], bbox[3]-bbox[1]
         pos = ((WIDTH-line_w)//2, HEIGHT-line_h-50)
+
         # shadow
         draw.text((pos[0]+2, pos[1]+2), line, font=font, fill=(0,0,0))
         draw.text(pos, line, font=font, fill=(255,255,255))
@@ -207,7 +230,7 @@ for i, line in enumerate(wrapped_lines):
         video.write(frame)
 
 video.release()
-print("✅ Video created!")
+print("✅ Video created matching narration length!")
 
 # -----------------------------
 # Step 4: Generate TTS
