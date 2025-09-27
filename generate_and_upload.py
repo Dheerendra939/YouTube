@@ -58,7 +58,7 @@ print("✅ Script generated!")
 # Step 2: Image Fetch (Google → Pexels)
 # -----------------------------
 def fetch_google_images(query, num=15):
-    GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     GOOGLE_CX = os.environ.get("GOOGLE_CX")
     if not GEMINI_API_KEY or not GOOGLE_CX:
         print("⚠️ Google API key or CX not found.")
