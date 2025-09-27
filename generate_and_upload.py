@@ -55,79 +55,73 @@ bio_text = bio_resp.text.strip()
 print("✅ Script generated!")
 
 # -----------------------------
-# Step 2: Image Fetch (Google → Pexels)
 # -----------------------------
-def fetch_google_images(query, num=15):
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-    GOOGLE_CX = os.environ.get("GOOGLE_CX")
-    if not GEMINI_API_KEY or not GOOGLE_CX:
-        print("⚠️ Google API key or CX not found.")
-        return []
-    url = "https://www.googleapis.com/customsearch/v1"
-    params = {"q": query, "cx": GOOGLE_CX, "key": GEMINI_API_KEY, "searchType": "image", "num": num}
+# Step 2: Fetch Images
+# -----------------------------
+print("🖼️ Fetching images...")
+
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GOOGLE_CX = os.environ.get("GOOGLE_CX")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+
+images = []
+image_folder = "images"
+os.makedirs(image_folder, exist_ok=True)
+
+# Try Google Images first
+if GOOGLE_API_KEY and GOOGLE_CX:
+    google_url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "q": topic,
+        "cx": GOOGLE_CX,
+        "key": GOOGLE_API_KEY,
+        "searchType": "image",
+        "num": 10
+    }
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = requests.get(google_url, params=params, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            return [item["link"] for item in data.get("items", [])]
-        else:
-            print("❌ Google Images API error:", r.text)
-            return []
-    except Exception as e:
-        print("❌ Google fetch failed:", e)
-        return []
-
-def fetch_images(query, min_required=10):
-    image_folder = "images"
-    os.makedirs(image_folder, exist_ok=True)
-    images = []
-
-    # Google first
-    print("🔎 Fetching from Google Images...")
-    google_links = fetch_google_images(query, num=15)
-    for i, url in enumerate(google_links):
-        try:
-            img_path = os.path.join(image_folder, f"google_{i}.jpg")
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
+            for i, item in enumerate(data.get("items", [])):
+                img_url = item["link"]
+                img_path = os.path.join(image_folder, f"google_{i}.jpg")
+                img_data = requests.get(img_url, timeout=10).content
                 with open(img_path, "wb") as f:
-                    f.write(r.content)
+                    f.write(img_data)
                 images.append(img_path)
-        except:
-            pass
+                print(f"✅ Google: {img_path}")
+        else:
+            print(f"❌ Google Images API error {r.status_code}: {r.text}")
+            print(f"🔍 Debug Info → CX={GOOGLE_CX}, Key={GOOGLE_API_KEY[:6]}..., Query={topic}")
+    except Exception as e:
+        print(f"❌ Google fetch failed: {e}")
+        print(f"🔍 Debug Info → CX={GOOGLE_CX}, Key={GOOGLE_API_KEY[:6]}..., Query={topic}")
+else:
+    print("⚠️ GOOGLE_API_KEY or GOOGLE_CX not set. Skipping Google Images.")
 
-    # Pexels fallback
-    if len(images) < min_required:
-        print("📸 Falling back to Pexels...")
-        PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-        if PEXELS_API_KEY:
-            headers = {"Authorization": PEXELS_API_KEY}
-            pexels_url = "https://api.pexels.com/v1/search"
-            try:
-                r = requests.get(pexels_url, headers=headers, params={"query": query, "per_page": 15}, timeout=10)
-                if r.status_code == 200:
-                    data = r.json()
-                    for i, photo in enumerate(data.get("photos", [])):
-                        img_url = photo["src"]["large"]
-                        img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
-                        img_data = requests.get(img_url, timeout=10).content
-                        with open(img_path, "wb") as f:
-                            f.write(img_data)
-                        images.append(img_path)
-                else:
-                    print(f"❌ Pexels API error: {r.text}")
-            except Exception as e:
-                print(f"❌ Pexels fetch failed: {e}")
+# Fallback → Pexels
+if len(images) < 10:
+    print("📸 Falling back to Pexels...")
+    headers = {"Authorization": PEXELS_API_KEY}
+    try:
+        r = requests.get("https://api.pexels.com/v1/search", headers=headers, params={"query": topic, "per_page": 15}, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            for i, photo in enumerate(data.get("photos", [])):
+                img_url = photo["src"]["large"]
+                img_path = os.path.join(image_folder, f"pexels_{i}.jpg")
+                img_data = requests.get(img_url, timeout=10).content
+                with open(img_path, "wb") as f:
+                    f.write(img_data)
+                images.append(img_path)
+                print(f"✅ Pexels: {img_path}")
+        else:
+            print(f"❌ Pexels API error: {r.text}")
+    except Exception as e:
+        print(f"❌ Pexels fetch failed: {e}")
 
-    if len(images) < min_required:
-        raise Exception("❌ Not enough images (need at least 10).")
-
-    return images
-
-print("🖼️ Fetching images...")
-images = fetch_images(topic, min_required=10)
-print(f"✅ Got {len(images)} images")
-
+if len(images) < 10:
+    raise Exception("❌ No images available. Need at least 10.")
 # -----------------------------
 # Step 3: Create Video
 # -----------------------------
