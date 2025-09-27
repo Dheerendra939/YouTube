@@ -26,9 +26,10 @@ VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
 FONT_PATH = "NotoSans-Devanagari.ttf"
+VIDEO_DURATION = random.randint(50, 59)  # 50–59 sec
 
 # -----------------------------
-# Topics for shorts
+# Topics
 # -----------------------------
 TOPICS = [
     "Mahatma Gandhi", "Swami Vivekananda", "APJ Abdul Kalam", "Bhagat Singh",
@@ -71,7 +72,6 @@ def fetch_google_images(query, num=10):
         if not GOOGLE_KEY or not GOOGLE_CX:
             print("❌ Missing GOOGLE_API_KEY or GOOGLE_CX in environment variables")
             return []
-
         url = "https://www.googleapis.com/customsearch/v1"
         params = {
             "q": query,
@@ -82,20 +82,14 @@ def fetch_google_images(query, num=10):
             "imgSize": "large",
             "safe": "high"
         }
-
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, timeout=10)
         data = r.json()
-
-        # Handle API errors
         if "error" in data:
             print("❌ Google API Error:", data["error"].get("message", "Unknown error"))
             return []
-
         if "items" not in data:
             print("⚠️ Google returned no items:", data)
             return []
-
-        # Download images
         for idx, item in enumerate(data["items"]):
             link = item.get("link")
             if not link:
@@ -124,18 +118,14 @@ def fetch_pexels_images(query, num=10):
         if not PEXELS_KEY:
             print("❌ Missing PEXELS_API_KEY in environment variables")
             return []
-
         headers = {"Authorization": PEXELS_KEY}
         url = "https://api.pexels.com/v1/search"
         params = {"query": query, "per_page": num}
-
-        r = requests.get(url, headers=headers, params=params)
+        r = requests.get(url, headers=headers, params=params, timeout=10)
         data = r.json()
-
         if "photos" not in data:
             print("⚠️ Pexels returned no photos:", data)
             return []
-
         for idx, photo in enumerate(data["photos"]):
             link = photo["src"]["large"]
             try:
@@ -166,20 +156,48 @@ def get_images(query, num=10):
     print(f"✅ Got {len(images)} valid images")
     return images
 
-images = get_images(topic, num=10)
+images = get_images(topic, 10)
 
 # -----------------------------
-# Step 3: Create Video
+# Step 3: Create Video (with cropped images)
 # -----------------------------
 print("🎬 Creating video...")
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
-
 font_size = 36
 try:
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
     print(f"❌ Font not found: {FONT_PATH}")
     exit()
+
+wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
+total_lines = len(wrapped_lines)
+frames_per_line = (VIDEO_DURATION * FPS) // total_lines
+
+for i, line in enumerate(wrapped_lines):
+    img_file = images[i % len(images)]
+    img_base = Image.open(img_file)
+    # Crop to short aspect ratio without stretching
+    img_base = img_base.resize((WIDTH, int(img_base.height * WIDTH / img_base.width)))
+    top = (img_base.height - HEIGHT) // 2
+    if top < 0:
+        top = 0
+    img_base = img_base.crop((0, top, WIDTH, top + HEIGHT))
+    img = img_base.copy()
+    draw = ImageDraw.Draw(img)
+
+    # Draw text in white
+    bbox = font.getbbox(line)
+    line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pos = ((WIDTH - line_w) // 2, HEIGHT - 200)
+    draw.text(pos, line, font=font, fill=(255, 255, 255))
+
+    overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    for _ in range(frames_per_line):
+        video.write(overlay_cv2)
+
+video.release()
+print("✅ Video created!")
 
 # -----------------------------
 # Step 4: Generate TTS
@@ -197,69 +215,35 @@ audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncodin
 response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 with open(AUDIO_FILENAME, "wb") as f:
     f.write(response.audio_content)
-
-# Get audio duration
-audio_segment = AudioSegment.from_file(AUDIO_FILENAME)
-audio_duration_sec = audio_segment.duration_seconds
-print(f"✅ Voiceover ready! Duration: {audio_duration_sec:.2f}s")
+print("✅ Voiceover ready!")
 
 # -----------------------------
-# Step 5: Draw text on video frames
+# Step 5: Merge Video + TTS + Background Music
 # -----------------------------
-wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
-total_lines = len(wrapped_lines)
-frames_per_line = int((audio_duration_sec * FPS) / total_lines)
-print(f"Frames per line: {frames_per_line}")
+print("🔀 Adding background music...")
+tts_audio = AudioSegment.from_file(AUDIO_FILENAME)
+bg_music = AudioSegment.from_file("background.mp3")
 
-def crop_to_vertical(img, target_w, target_h):
-    """Crop image to vertical 9:16 ratio"""
-    w, h = img.size
-    target_ratio = target_h / target_w
-    img_ratio = h / w
+# Trim or loop music to match narration
+if len(bg_music) > len(tts_audio):
+    bg_music = bg_music[:len(tts_audio)]
+else:
+    repeats = int(len(tts_audio) / len(bg_music)) + 1
+    bg_music = bg_music * repeats
+    bg_music = bg_music[:len(tts_audio)]
 
-    if img_ratio > target_ratio:
-        # Crop height
-        new_h = int(w * target_ratio)
-        top = (h - new_h) // 2
-        img = img.crop((0, top, w, top + new_h))
-    else:
-        # Crop width
-        new_w = int(h / target_ratio)
-        left = (w - new_w) // 2
-        img = img.crop((left, 0, left + new_w, h))
-    return img.resize((target_w, target_h))
+bg_music = bg_music - 10  # reduce volume by 10 dB
+combined_audio = tts_audio.overlay(bg_music)
+combined_audio.export("final_audio.mp3", format="mp3")
 
-for i, line in enumerate(wrapped_lines):
-    img_file = images[i % len(images)]
-    img_base = Image.open(img_file).convert("RGB")
-    img_base = crop_to_vertical(img_base, WIDTH, HEIGHT)
-    img = img_base.copy()
-    draw = ImageDraw.Draw(img)
-
-    bbox = font.getbbox(line)
-    line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    pos = ((WIDTH - line_w) // 2, HEIGHT - 200)
-    draw.text(pos, line, font=font, fill=(255, 255, 255))
-
-    overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    for _ in range(frames_per_line):
-        video.write(overlay_cv2)
-
-video.release()
-print("✅ Video created!")
-
-# -----------------------------
-# Step 6: Merge Video + Audio
-# -----------------------------
-print("🔀 Merging video + audio...")
 subprocess.run([
-    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", AUDIO_FILENAME,
+    "ffmpeg", "-y", "-i", VIDEO_FILENAME, "-i", "final_audio.mp3",
     "-c:v", "copy", "-c:a", "aac", FINAL_FILENAME
 ], check=True)
-print("✅ Final video ready!")
+print("✅ Final video with background music ready!")
 
 # -----------------------------
-# Step 7: Upload to YouTube
+# Step 6: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
@@ -277,7 +261,7 @@ creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
 
 safe_description = (
-    f"{topic} की प्रेरणादायक 55 सेकंड जीवनी। "
+    f"{topic} "
     f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
     "#Shorts #Motivation #History"
 )
@@ -292,7 +276,7 @@ request = youtube.videos().insert(
     part="snippet,status",
     body={
         "snippet": {
-            "title": f"{topic} की 55 सेकंड प्रेरणादायक जीवनी #Shorts",
+            "title": f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
             "description": safe_description[:4500],
             "tags": tags,
             "categoryId": "22"
