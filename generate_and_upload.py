@@ -13,9 +13,9 @@ import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
 import json
-import io
 from pydub import AudioSegment
-import imghdr, traceback
+import imghdr
+import traceback
 
 # -----------------------------
 # Settings
@@ -64,43 +64,42 @@ GOOGLE_CX = os.getenv("GOOGLE_CX")
 PEXELS_KEY = os.getenv("PEXELS_API_KEY")
 os.makedirs("images", exist_ok=True)
 
-def crop_to_aspect(img, target_width, target_height):
-    img_w, img_h = img.size
-    target_ratio = target_width / target_height
-    img_ratio = img_w / img_h
-
-    if img_ratio > target_ratio:
-        new_width = int(img_h * target_ratio)
-        left = (img_w - new_width) // 2
-        img = img.crop((left, 0, left + new_width, img_h))
-    else:
-        new_height = int(img_w / target_ratio)
-        top = (img_h - new_height) // 2
-        img = img.crop((0, top, img_w, top + new_height))
-    
-    return img.resize((target_width, target_height))
-
 def fetch_google_images(query, num=10):
     print("🔎 Fetching from Google Custom Search...")
     images = []
     try:
         if not GOOGLE_KEY or not GOOGLE_CX:
-            print("❌ Missing GOOGLE_API_KEY or GOOGLE_CX")
+            print("❌ Missing GOOGLE_API_KEY or GOOGLE_CX in environment variables")
             return []
+
         url = "https://www.googleapis.com/customsearch/v1"
-        params = {"q": query, "cx": GOOGLE_CX, "key": GOOGLE_KEY, "searchType": "image",
-                  "num": num, "imgSize": "large", "safe": "high"}
+        params = {
+            "q": query,
+            "cx": GOOGLE_CX,
+            "key": GOOGLE_KEY,
+            "searchType": "image",
+            "num": num,
+            "imgSize": "large",
+            "safe": "high"
+        }
+
         r = requests.get(url, params=params)
         data = r.json()
+
+        # Handle API errors
         if "error" in data:
             print("❌ Google API Error:", data["error"].get("message", "Unknown error"))
             return []
+
         if "items" not in data:
             print("⚠️ Google returned no items:", data)
             return []
+
+        # Download images
         for idx, item in enumerate(data["items"]):
             link = item.get("link")
-            if not link: continue
+            if not link:
+                continue
             try:
                 img = requests.get(link, timeout=10)
                 fname = f"images/google_{idx}.jpg"
@@ -123,16 +122,20 @@ def fetch_pexels_images(query, num=10):
     images = []
     try:
         if not PEXELS_KEY:
-            print("❌ Missing PEXELS_API_KEY")
+            print("❌ Missing PEXELS_API_KEY in environment variables")
             return []
+
         headers = {"Authorization": PEXELS_KEY}
         url = "https://api.pexels.com/v1/search"
         params = {"query": query, "per_page": num}
+
         r = requests.get(url, headers=headers, params=params)
         data = r.json()
+
         if "photos" not in data:
             print("⚠️ Pexels returned no photos:", data)
             return []
+
         for idx, photo in enumerate(data["photos"]):
             link = photo["src"]["large"]
             try:
@@ -170,15 +173,13 @@ images = get_images(topic, num=10)
 # -----------------------------
 print("🎬 Creating video...")
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
+
 font_size = 36
 try:
     font = ImageFont.truetype(FONT_PATH, font_size)
 except IOError:
     print(f"❌ Font not found: {FONT_PATH}")
     exit()
-
-wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
-total_lines = len(wrapped_lines)
 
 # -----------------------------
 # Step 4: Generate TTS
@@ -188,40 +189,67 @@ tts_json = os.environ["TTS"]
 credentials_info = json.loads(tts_json)
 credentials = service_account.Credentials.from_service_account_info(credentials_info)
 tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
+
 synthesis_input = texttospeech.SynthesisInput(text=bio_text)
 voice = texttospeech.VoiceSelectionParams(language_code="hi-IN", ssml_gender=texttospeech.SsmlVoiceGender.MALE)
 audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3, pitch=-6)
+
 response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 with open(AUDIO_FILENAME, "wb") as f:
     f.write(response.audio_content)
 
 # Get audio duration
-audio_segment = AudioSegment.from_file(io.BytesIO(response.audio_content), format="mp3")
-audio_duration_sec = len(audio_segment) / 1000
-frames_per_line = int((audio_duration_sec * FPS) / total_lines)
-print(f"✅ Voiceover ready! Duration: {audio_duration_sec:.2f}s, frames per line: {frames_per_line}")
+audio_segment = AudioSegment.from_file(AUDIO_FILENAME)
+audio_duration_sec = audio_segment.duration_seconds
+print(f"✅ Voiceover ready! Duration: {audio_duration_sec:.2f}s")
 
 # -----------------------------
-# Draw frames
+# Step 5: Draw text on video frames
 # -----------------------------
+wrapped_lines = wrap(bio_text, width=30, break_long_words=False, replace_whitespace=False)
+total_lines = len(wrapped_lines)
+frames_per_line = int((audio_duration_sec * FPS) / total_lines)
+print(f"Frames per line: {frames_per_line}")
+
+def crop_to_vertical(img, target_w, target_h):
+    """Crop image to vertical 9:16 ratio"""
+    w, h = img.size
+    target_ratio = target_h / target_w
+    img_ratio = h / w
+
+    if img_ratio > target_ratio:
+        # Crop height
+        new_h = int(w * target_ratio)
+        top = (h - new_h) // 2
+        img = img.crop((0, top, w, top + new_h))
+    else:
+        # Crop width
+        new_w = int(h / target_ratio)
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+    return img.resize((target_w, target_h))
+
 for i, line in enumerate(wrapped_lines):
     img_file = images[i % len(images)]
-    img_base = Image.open(img_file)
-    img_base = crop_to_aspect(img_base, WIDTH, HEIGHT)
+    img_base = Image.open(img_file).convert("RGB")
+    img_base = crop_to_vertical(img_base, WIDTH, HEIGHT)
     img = img_base.copy()
     draw = ImageDraw.Draw(img)
+
     bbox = font.getbbox(line)
     line_w, line_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     pos = ((WIDTH - line_w) // 2, HEIGHT - 200)
     draw.text(pos, line, font=font, fill=(255, 255, 255))
+
     overlay_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
     for _ in range(frames_per_line):
         video.write(overlay_cv2)
+
 video.release()
 print("✅ Video created!")
 
 # -----------------------------
-# Step 5: Merge Video + Audio
+# Step 6: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video + audio...")
 subprocess.run([
@@ -231,12 +259,13 @@ subprocess.run([
 print("✅ Final video ready!")
 
 # -----------------------------
-# Step 6: Upload to YouTube
+# Step 7: Upload to YouTube
 # -----------------------------
 print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+
 creds = Credentials(
     None,
     refresh_token=REFRESH_TOKEN,
@@ -246,16 +275,19 @@ creds = Credentials(
 )
 creds.refresh(google.auth.transport.requests.Request())
 youtube = build("youtube", "v3", credentials=creds)
+
 safe_description = (
     f"{topic} की प्रेरणादायक 55 सेकंड जीवनी। "
     f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
     "#Shorts #Motivation #History"
 )
+
 tags = [
     topic, "जीवनी", "Motivation", "Success", "Inspiration", "India", "History",
     "Biography", "Life Story", "Leadership", "Quotes", "Legacy",
     "Famous People", "Education", "Struggle", "Shorts", "Hindi", "ज्ञान", "Learning", "Wisdom"
 ]
+
 request = youtube.videos().insert(
     part="snippet,status",
     body={
@@ -269,5 +301,6 @@ request = youtube.videos().insert(
     },
     media_body=FINAL_FILENAME
 )
+
 response = request.execute()
 print(f"✅ Upload complete! Video: https://www.youtube.com/watch?v={response['id']}")
