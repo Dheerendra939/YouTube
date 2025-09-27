@@ -13,6 +13,8 @@ import google.auth.transport.requests
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
 import json
+import imghdr
+import traceback
 
 # -----------------------------
 # Settings
@@ -55,16 +57,11 @@ bio_text = bio_resp.text.strip()
 print("✅ Script generated!")
 
 # -----------------------------
+# Step 2: Fetch Images (Google Custom Search + Pexels fallback)
 # -----------------------------
-# =========================
-# STEP 2: Fetch Images
-# =========================
-import requests, os, imghdr, traceback
-
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CX = os.getenv("GOOGLE_CX")
 PEXELS_KEY = os.getenv("PEXELS_API_KEY")
-
 os.makedirs("images", exist_ok=True)
 
 def fetch_google_images(query, num=10):
@@ -81,15 +78,14 @@ def fetch_google_images(query, num=10):
             "cx": GOOGLE_CX,
             "key": GOOGLE_KEY,
             "searchType": "image",
-            "num": num,
+            "num": min(num, 10),  # Google API max 10 per request
             "imgSize": "large",
             "safe": "high"
         }
 
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, timeout=10)
         data = r.json()
 
-        # Handle API errors
         if "error" in data:
             print("❌ Google API Error:", data["error"].get("message", "Unknown error"))
             return []
@@ -98,7 +94,6 @@ def fetch_google_images(query, num=10):
             print("⚠️ Google returned no items:", data)
             return []
 
-        # Download images
         for idx, item in enumerate(data["items"]):
             link = item.get("link")
             if not link:
@@ -121,7 +116,6 @@ def fetch_google_images(query, num=10):
 
     return images
 
-
 def fetch_pexels_images(query, num=10):
     print("📸 Fetching from Pexels...")
     images = []
@@ -134,7 +128,7 @@ def fetch_pexels_images(query, num=10):
         url = "https://api.pexels.com/v1/search"
         params = {"query": query, "per_page": num}
 
-        r = requests.get(url, headers=headers, params=params)
+        r = requests.get(url, headers=headers, params=params, timeout=10)
         data = r.json()
 
         if "photos" not in data:
@@ -161,20 +155,24 @@ def fetch_pexels_images(query, num=10):
 
     return images
 
-
 def get_images(query, num=10):
     images = fetch_google_images(query, num)
-
     if len(images) < num:
-        print(f"⚠️ Only got {len(images)} from Google, trying Pexels...")
-        extra = fetch_pexels_images(query, num - len(images))
-        images.extend(extra)
+        print(f"⚠️ Only got {len(images)} from Google, fetching remaining from Pexels...")
+        images.extend(fetch_pexels_images(query, num - len(images)))
 
     if len(images) < 5:
         raise Exception(f"❌ Not enough images. Needed {num}, got {len(images)}")
 
     print(f"✅ Got {len(images)} valid images")
     return images
+
+try:
+    images = get_images(topic, num=10)
+except Exception as e:
+    print(f"❌ Step 2 failed: {e}")
+    exit(1)
+
 # -----------------------------
 # Step 3: Create Video
 # -----------------------------
