@@ -25,7 +25,7 @@ AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
 VIDEO_DURATION = random.randint(50, 59)  # 50–59 sec
 FONT_PATH = "NotoSans-Devanagari.ttf"
-BGM_PATH = "background.mp3"  # background music in repo
+BGM_PATH = "background_music.mp3"  # background music in repo
 
 # -----------------------------
 # Topics for shorts
