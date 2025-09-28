@@ -10,8 +10,7 @@ from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.auth.transport.requests
-from PIL import Image, ImageDraw, ImageFont
-from textwrap import wrap
+from PIL import Image
 import json
 from pydub import AudioSegment
 
@@ -23,7 +22,6 @@ FPS = 24
 VIDEO_FILENAME = "video.mp4"
 AUDIO_FILENAME = "audio.mp3"
 FINAL_FILENAME = "short_final.mp4"
-FONT_PATH = "NotoSans-Devanagari.ttf"
 BGM_PATH = "background_music.mp3"
 
 # -----------------------------
@@ -165,36 +163,36 @@ audio_duration = len(voiceover)/1000.0
 frames_total = int(audio_duration * FPS)
 
 # -----------------------------
-# Step 4: Create Video with zoom effect
+# Step 4: Create Video with zoom effect (no text, double image time)
 # -----------------------------
 print("🎬 Creating video with zoom effect matching narration length...")
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
-try: font = ImageFont.truetype(FONT_PATH, 36)
-except: exit("❌ Font not found")
 
-wrapped_lines = wrap(bio_text, width=30)
-total_lines = len(wrapped_lines)
-frames_per_line = max(1, frames_total // total_lines)
+# calculate frames per image (double duration)
+frames_per_image = max(1, frames_total // len(images))
+frames_per_image *= 2  
 
-for i, line in enumerate(wrapped_lines):
-    img_file = images[i % len(images)]
+# adjust total frames to match narration
+total_needed_frames = frames_total
+frames_generated = 0
+
+for img_file in images:
     img_base = Image.open(img_file)
     img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
-    for f in range(frames_per_line):
-        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_line)  # zoom in/out
+    for f in range(frames_per_image):
+        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_image)  # smooth zoom
         w,h = int(WIDTH*zoom), int(HEIGHT*zoom)
         img = img_base.resize((w,h))
         left = (w-WIDTH)//2
         top = (h-HEIGHT)//2
         img_cropped = img.crop((left,top,left+WIDTH,top+HEIGHT)).convert("RGB")
-        draw = ImageDraw.Draw(img_cropped)
-        bbox = font.getbbox(line)
-        line_w, line_h = bbox[2]-bbox[0], bbox[3]-bbox[1]
-        pos = ((WIDTH-line_w)//2, HEIGHT-line_h-50)
-        draw.text((pos[0]+2,pos[1]+2), line, font=font, fill=(0,0,0))  # shadow
-        draw.text(pos, line, font=font, fill=(255,255,255))
         frame = cv2.cvtColor(np.array(img_cropped), cv2.COLOR_RGB2BGR)
         video.write(frame)
+        frames_generated += 1
+        if frames_generated >= total_needed_frames:
+            break
+    if frames_generated >= total_needed_frames:
+        break
 
 video.release()
 print("✅ Video created!")
