@@ -57,14 +57,6 @@ def get_next_topic():
 
     # Pick random topic
     topic = random.choice(available)
-
-    # Write it to used.txt immediately
-    try:
-        with open(USED_FILE, "a", encoding="utf-8") as f:
-            f.write(topic + "\n")
-    except Exception as e:
-        print(f"❌ Failed to write to {USED_FILE}: {e}")
-
     return topic
 
 topic = get_next_topic()
@@ -180,16 +172,14 @@ audio_duration = len(voiceover)/1000.0
 frames_total = int(audio_duration * FPS)
 
 # -----------------------------
-# Step 4: Create Video with zoom effect (no text, double image time)
+# Step 4: Create Video with zoom effect
 # -----------------------------
 print("🎬 Creating video with zoom effect matching narration length...")
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
 
-# calculate frames per image (double duration)
 frames_per_image = max(1, frames_total // len(images))
-frames_per_image *= 2  
+frames_per_image *= 2  # double image time
 
-# adjust total frames to match narration
 total_needed_frames = frames_total
 frames_generated = 0
 
@@ -197,7 +187,7 @@ for img_file in images:
     img_base = Image.open(img_file)
     img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
     for f in range(frames_per_image):
-        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_image)  # smooth zoom
+        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_image)
         w,h = int(WIDTH*zoom), int(HEIGHT*zoom)
         img = img_base.resize((w,h))
         left = (w-WIDTH)//2
@@ -218,14 +208,13 @@ print("✅ Video created!")
 # Step 5: Add Background Music
 # -----------------------------
 print("🎵 Adding background music...")
-bgm = AudioSegment.from_file(BGM_PATH)-2
+bgm = AudioSegment.from_file(BGM_PATH) - 4   # lower volume (adjust here)
 if len(bgm) < len(voiceover): bgm = bgm * (len(voiceover)//len(bgm)+1)
 bgm = bgm[:len(voiceover)]
 final_audio = voiceover.overlay(bgm)
 final_audio.export(AUDIO_FILENAME, format="mp3")
 print("✅ Background music added!")
 
-# -----------------------------
 # -----------------------------
 # Step 6: Merge Video + Audio
 # -----------------------------
@@ -275,3 +264,10 @@ request = youtube.videos().insert(
 
 response = request.execute()
 print(f"✅ Upload complete! Video: https://www.youtube.com/watch?v={response['id']}")
+
+# -----------------------------
+# Step 8: Mark topic as used
+# -----------------------------
+with open(USED_FILE, "a", encoding="utf-8") as f:
+    f.write(topic + "\n")
+print(f"📝 Added '{topic}' to {USED_FILE}")
