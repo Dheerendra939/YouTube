@@ -226,14 +226,15 @@ final_audio.export(AUDIO_FILENAME, format="mp3")
 print("✅ Background music added!")
 
 # -----------------------------
+# -----------------------------
 # Step 6: Merge Video + Audio
 # -----------------------------
 print("🔀 Merging video + audio...")
 subprocess.run([
     "ffmpeg","-y","-i",VIDEO_FILENAME,"-i",AUDIO_FILENAME,
     "-c:v","copy","-c:a","aac",FINAL_FILENAME
-], check=True
- print("✅ Final video ready!")
+], check=True)
+print("✅ Final video ready!")
 
 # -----------------------------
 # Step 7: Upload to YouTube
@@ -243,38 +244,31 @@ CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
-creds = Credentials(
-    None,
-    refresh_token=REFRESH_TOKEN,
-    token_uri="https://oauth2.googleapis.com/token",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET
-)
+creds = Credentials(None, refresh_token=REFRESH_TOKEN,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
 creds.refresh(google.auth.transport.requests.Request())
-youtube = build("youtube", "v3", credentials=creds)
+youtube = build("youtube","v3",credentials=creds)
 
 safe_description = (
     f"Life of {topic} ❤️❤️❤️❤️ "
     f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
     "#Shorts #Motivation #History"
 )
-
-tags = [
-    topic, "जीवनी", "Motivation", "Success", "Inspiration", "India", "History",
-    "Biography", "Life Story", "Leadership", "Quotes", "Legacy", "Famous People",
-    "Education", "Struggle", "Shorts", "Hindi", "ज्ञान", "Learning", "Wisdom"
-]
+tags = [topic,"जीवनी","Motivation","Success","Inspiration","India","History",
+        "Biography","Life Story","Leadership","Quotes","Legacy","Famous People",
+        "Education","Struggle","Shorts","Hindi","ज्ञान","Learning","Wisdom"]
 
 request = youtube.videos().insert(
     part="snippet,status",
     body={
-        "snippet": {
-            "title": f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
-            "description": safe_description[:4500],
-            "tags": tags,
-            "categoryId": "22"
+        "snippet":{
+            "title":f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
+            "description":safe_description[:4500],
+            "tags":tags,
+            "categoryId":"22"
         },
-        "status": {"privacyStatus": "public"}
+        "status":{"privacyStatus":"public"}
     },
     media_body=FINAL_FILENAME
 )
