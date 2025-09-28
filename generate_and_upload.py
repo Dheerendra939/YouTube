@@ -33,21 +33,38 @@ USED_FILE = "used.txt"
 os.makedirs("images", exist_ok=True)
 
 def get_next_topic():
+    # Read all topics
     with open(TOPICS_FILE, "r", encoding="utf-8") as f:
         all_topics = [line.strip() for line in f if line.strip()]
+
+    # Read used topics
     if os.path.exists(USED_FILE):
         with open(USED_FILE, "r", encoding="utf-8") as f:
-            used = set(line.strip() for line in f)
+            used = set(line.strip() for line in f if line.strip())
     else:
         used = set()
+
+    # Get available topics
     available = [t for t in all_topics if t not in used]
+
+    # Reset if needed
     if not available:
-        print("❌ No available topics. Reset used.txt")
+        print("❌ All topics used. Resetting used.txt...")
         available = all_topics
-        open(USED_FILE, "w").close()
+        with open(USED_FILE, "w", encoding="utf-8") as f:
+            f.write("")  # clear file
+        used = set()
+
+    # Pick random topic
     topic = random.choice(available)
-    with open(USED_FILE, "a", encoding="utf-8") as f:
-        f.write(topic + "\n")
+
+    # Write it to used.txt immediately
+    try:
+        with open(USED_FILE, "a", encoding="utf-8") as f:
+            f.write(topic + "\n")
+    except Exception as e:
+        print(f"❌ Failed to write to {USED_FILE}: {e}")
+
     return topic
 
 topic = get_next_topic()
@@ -215,8 +232,8 @@ print("🔀 Merging video + audio...")
 subprocess.run([
     "ffmpeg","-y","-i",VIDEO_FILENAME,"-i",AUDIO_FILENAME,
     "-c:v","copy","-c:a","aac",FINAL_FILENAME
-], check=True)
-print("✅ Final video ready!")
+], check=True
+ print("✅ Final video ready!")
 
 # -----------------------------
 # Step 7: Upload to YouTube
@@ -225,27 +242,42 @@ print("📤 Uploading to YouTube...")
 CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
-creds = Credentials(None, refresh_token=REFRESH_TOKEN,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
-creds.refresh(google.auth.transport.requests.Request())
-youtube = build("youtube","v3",credentials=creds)
 
-safe_description = (f"Life of {topic} ❤️❤️❤️❤️ "
-                    f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
-                    "#Shorts #Motivation #History")
-tags = [topic,"जीवनी","Motivation","Success","Inspiration","India","History","Biography",
-        "Life Story","Leadership","Quotes","Legacy","Famous People","Education","Struggle",
-        "Shorts","Hindi","ज्ञान","Learning","Wisdom"]
+creds = Credentials(
+    None,
+    refresh_token=REFRESH_TOKEN,
+    token_uri="https://oauth2.googleapis.com/token",
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET
+)
+creds.refresh(google.auth.transport.requests.Request())
+youtube = build("youtube", "v3", credentials=creds)
+
+safe_description = (
+    f"Life of {topic} ❤️❤️❤️❤️ "
+    f"इस शॉर्ट वीडियो में आप {topic} के जीवन, संघर्ष और योगदान के बारे में जानेंगे।\n\n"
+    "#Shorts #Motivation #History"
+)
+
+tags = [
+    topic, "जीवनी", "Motivation", "Success", "Inspiration", "India", "History",
+    "Biography", "Life Story", "Leadership", "Quotes", "Legacy", "Famous People",
+    "Education", "Struggle", "Shorts", "Hindi", "ज्ञान", "Learning", "Wisdom"
+]
 
 request = youtube.videos().insert(
     part="snippet,status",
-    body={"snippet":{"title":f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
-                     "description":safe_description[:4500],
-                     "tags":tags,
-                     "categoryId":"22"},
-          "status":{"privacyStatus":"public"}},
+    body={
+        "snippet": {
+            "title": f"Life of {topic} ❤️❤️❤️❤️ #Shorts",
+            "description": safe_description[:4500],
+            "tags": tags,
+            "categoryId": "22"
+        },
+        "status": {"privacyStatus": "public"}
+    },
     media_body=FINAL_FILENAME
 )
+
 response = request.execute()
 print(f"✅ Upload complete! Video: https://www.youtube.com/watch?v={response['id']}")
