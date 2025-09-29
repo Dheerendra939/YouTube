@@ -196,7 +196,7 @@ for img_file in images:
     img_base = Image.open(img_file)  
     img_base = crop_to_frame(img_base, WIDTH, HEIGHT)  
     for f in range(frames_per_image):  
-        zoom = 1 + 0.05 * np.sin(np.pi * f / frames_per_image)  
+        zoom = 1 + 0.10 * np.sin(np.pi * f / frames_per_image)  
         w,h = int(WIDTH*zoom), int(HEIGHT*zoom)  
         img = img_base.resize((w,h))  
         left = (w-WIDTH)//2  
@@ -217,7 +217,7 @@ print("✅ Video created!")
 # Step 5: Add Background Music  
 # -----------------------------  
 print("🎵 Adding background music...")  
-bgm = AudioSegment.from_file(BGM_PATH) - 2  
+bgm = AudioSegment.from_file(BGM_PATH) - 15
 if len(bgm) < len(voiceover): bgm = bgm * (len(voiceover)//len(bgm)+1)  
 bgm = bgm[:len(voiceover)]  
 final_audio = voiceover.overlay(bgm)  
