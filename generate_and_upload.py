@@ -217,7 +217,7 @@ print("✅ Video created!")
 # Step 5: Add Background Music  
 # -----------------------------  
 print("🎵 Adding background music...")  
-bgm = AudioSegment.from_file(BGM_PATH) - 13
+bgm = AudioSegment.from_file(BGM_PATH) - 15
 if len(bgm) < len(voiceover): bgm = bgm * (len(voiceover)//len(bgm)+1)  
 bgm = bgm[:len(voiceover)]  
 final_audio = voiceover.overlay(bgm)  
