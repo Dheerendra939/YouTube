@@ -1,407 +1,107 @@
-Mahatma Gandhi
-Swami Vivekananda
-APJ Abdul Kalam
-Bhagat Singh
-Rani Lakshmibai
-Chanakya
-Rabindranath Tagore
-Sardar Vallabhbhai Patel
-Subhas Chandra Bose
-Kalpana Chawla
-Albert Einstein
-Nikola Tesla
-Mother Teresa
-Martin Luther King Jr
-Steve Jobs
-Elon Musk
-Mahatma Jyotirao Phule
-Indira Gandhi
-Jawaharlal Nehru
-Mao Zedong
-Winston Churchill
-Abraham Lincoln
-Theodore Roosevelt
-Barack Obama
-Donald Trump
-Joe Biden
-Kamala Harris
-Angela Merkel
-Margaret Thatcher
-Ratan Tata
-Dhirubhai Ambani
-Mukesh Ambani
-Bill Gates
-Mark Zuckerberg
-Larry Page
-Sergey Brin
-Jeff Bezos
-Warren Buffett
-Charlie Munger
-Oprah Winfrey
-Ellen DeGeneres
-Jay Shetty
-Tony Robbins
-Deepak Chopra
-Sadhguru
-Dalai Lama
-Thich Nhat Hanh
-Rumi
-Osho
-Paramahansa Yogananda
-Swami Dayananda Saraswati
-Homi Bhabha
-Vikram Sarabhai
-C.V. Raman
-Meghnad Saha
-Srinivasa Ramanujan
-Jagadish Chandra Bose
-Marie Curie
-Rosalind Franklin
-Jane Goodall
-Wangari Maathai
-Mae Jemison
-Valentina Tereshkova
-Yuri Gagarin
-Neil Armstrong
-Buzz Aldrin
-Sally Ride
-Chris Hadfield
-Scott Kelly
-Peggy Whitson
-Rakesh Sharma
-Leonardo da Vinci
-Michelangelo
-Raphael
-Donatello
-Vincent van Gogh
-Pablo Picasso
-Claude Monet
-Salvador Dali
-Frida Kahlo
-Georgia O’Keeffe
-Henri Matisse
-Rembrandt
-Caravaggio
-Auguste Rodin
-Andy Warhol
-Banksy
-Stephen King
-Jules Verne
-H.G. Wells
-Arthur C. Clarke
-Isaac Asimov
-Neil Gaiman
-Terry Pratchett
-Douglas Adams
-C.S. Lewis
-J.R.R. Tolkien
-George R.R. Martin
-Suzanne Collins
-Veronica Roth
-Rick Riordan
-John Green
-Dan Brown
-Paulo Coelho
-Harper Lee
-F. Scott Fitzgerald
-J.D. Salinger
-Toni Morrison
-Chinua Achebe
-Ngugi wa Thiong’o
-Gabriel Garcia Marquez
-Isabel Allende
-Mario Vargas Llosa
-Octavio Paz
-Albert Camus
-Jean-Paul Sartre
-Simone de Beauvoir
-Friedrich Nietzsche
-Karl Marx
-Sigmund Freud
-Carl Jung
-B.F. Skinner
-John Locke
-Thomas Hobbes
-Jean-Jacques Rousseau
-Immanuel Kant
-David Hume
-Jeremy Bentham
-John Stuart Mill
-Michel Foucault
-Noam Chomsky
-Amartya Sen
-Milton Friedman
-Adam Smith
-John Maynard Keynes
-Paul Krugman
-Elinor Ostrom
-Barbara McClintock
-Lise Meitner
-Dorothy Hodgkin
-Rosalyn Yalow
-Ruth Benerito
-Ada Lovelace
-Alan Turing
-Tim Berners-Lee
-Homer
-Virgil
-Ovid
-Dante Alighieri
-Geoffrey Chaucer
-John Milton
-William Blake
-Percy Bysshe Shelley
-Lord Byron
-Robert Frost
-Walt Whitman
-Emily Dickinson
-Maya Angelou
-Langston Hughes
-Fernando Pessoa
-Pablo Neruda
-Confucius
-Laozi
-Sun Tzu
-Niccolo Machiavelli
-Thomas More
-Søren Kierkegaard
-Alexander the Great
-Julius Caesar
-Genghis Khan
-Attila the Hun
-Napoleon Bonaparte
-Adolf Hitler
-Joseph Stalin
-Fidel Castro
-Che Guevara
-Nelson Mandela
-Desmond Tutu
-Malala Yousafzai
-Greta Thunberg
-Jane Austen
-Charlotte Bronte
-Emily Bronte
-Mary Shelley
-Louisa May Alcott
-Virginia Woolf
-Hafez
-Saadi
-Kahlil Gibran
-Guru Nanak
-Buddha
-Jesus Christ
-Prophet Muhammad
-Moses
-Alexander Fleming
-Louis Pasteur
-Gregor Mendel
-Charles Darwin
-Alfred Nobel
-Richard Feynman
-Marie Curie
-Stephen Hawking
-Carl Sagan
-Richard Dawkins
-Neil deGrasse Tyson
-Jane Goodall
-Wangari Maathai
-Charles Babbage
-Thomas Edison
-James Watt
-Alexander Graham Bell
-Guglielmo Marconi
-Wright Brothers
-Ada Lovelace
-Alan Turing
-Tim Berners-Lee
-Steve Jobs
-Bill Gates
-Elon Musk
-Mark Zuckerberg
-Larry Page
-Sergey Brin
-Jeff Bezos
-Warren Buffett
-Charlie Munger
-Ratan Tata
-Dhirubhai Ambani
-Mukesh Ambani
-George Soros
-Oprah Winfrey
-Ellen DeGeneres
-Jay Shetty
-Tony Robbins
-Deepak Chopra
-Sadhguru
-Dalai Lama
-Thich Nhat Hanh
-Rumi
-Osho
-Paramahansa Yogananda
-Swami Vivekananda
-Mahatma Gandhi
-Subhas Chandra Bose
-Bhagat Singh
-Rani Lakshmibai
-Chandragupta Maurya
-Ashoka the Great
-Akbar the Great
-Shivaji Maharaj
-Tipu Sultan
-Maharana Pratap
-Prithviraj Chauhan
-Samudragupta
-Hannibal Barca
-Catherine the Great
-Queen Victoria
-Cleopatra
-Joan of Arc
-Elizabeth I
-Mary, Queen of Scots
-Marie Antoinette
-Simone Veil
-Emmeline Pankhurst
-Rosa Parks
-Susan B. Anthony
-Harriet Tubman
-Eleanor Roosevelt
-Golda Meir
-Indira Gandhi
-Aung San Suu Kyi
-Malala Yousafzai
-Greta Thunberg
-Emma Watson
-Shakira
-Beyonce
-Taylor Swift
-Adele
-Ed Sheeran
-Billie Eilish
-Katy Perry
-Rihanna
-Lady Gaga
-Madonna
-Elton John
-Freddie Mercury
-Michael Jackson
-Prince
-Whitney Houston
-Aretha Franklin
-Bob Dylan
-Leonard Cohen
-John Lennon
-Paul McCartney
-George Harrison
-Ringo Starr
-Jimi Hendrix
-Eric Clapton
-Stevie Wonder
-Miles Davis
-Louis Armstrong
-Duke Ellington
-Charlie Parker
-Ella Fitzgerald
-Billie Holiday
-Nina Simone
-Chet Baker
-John Coltrane
-Dizzy Gillespie
-Thelonious Monk
-Oscar Peterson
-Herbie Hancock
-Herbie Hancock
-Keith Jarrett
-Chick Corea
-Wayne Shorter
-Pat Metheny
-Stanley Kubrick
-Alfred Hitchcock
-Steven Spielberg
-Christopher Nolan
-Martin Scorsese
-Quentin Tarantino
-James Cameron
-Peter Jackson
-George Lucas
-Ridley Scott
-Francis Ford Coppola
-Akira Kurosawa
-Hayao Miyazaki
-Zhang Yimou
-Ang Lee
-Wong Kar-wai
-Stan Lee
-Jack Kirby
-Frank Miller
-Alan Moore
-Neil Gaiman
-Joe Hill
-Brian K. Vaughan
-Robert Kirkman
-Mark Millar
-Grant Morrison
-Alan Davis
-John Romita Jr.
-Todd McFarlane
-Jim Lee
-Frank Cho
-Hergé
-Osamu Tezuka
-Eiichiro Oda
-Masashi Kishimoto
-Akira Toriyama
-Hayao Miyazaki
-Makoto Shinkai
-Tite Kubo
-Kentaro Miura
-Yoshihiro Togashi
-Naoki Urasawa
-George R. R. Martin
-J. K. Rowling
-Suzanne Collins
-Veronica Roth
-Rick Riordan
-John Green
-Dan Brown
-Paulo Coelho
-Harper Lee
-F. Scott Fitzgerald
-J.D. Salinger
-Toni Morrison
-Chinua Achebe
-Ngugi wa Thiong’o
-Gabriel Garcia Marquez
-Isabel Allende
-Mario Vargas Llosa
-Octavio Paz
-Albert Camus
-Jean-Paul Sartre
-Simone de Beauvoir
-Friedrich Nietzsche
-Karl Marx
-Sigmund Freud
-Carl Jung
-B.F. Skinner
-John Locke
-Thomas Hobbes
-Jean-Jacques Rousseau
-Immanuel Kant
-David Hume
-Jeremy Bentham
-John Stuart Mill
-Michel Foucault
-Noam Chomsky
-Amartya Sen
-Milton Friedman
-Adam Smith
-John Maynard Keynes
-Paul Krugman
-Elinor Ostrom
-Barbara McClintock
-Lise Meitner
-Dorothy Hodgkin
-Rosalyn Yalow
-Ruth Benerito
-Ada Lovelace
-Alan Turing
-Tim Berners-Lee
+Shah Rukh Khan
+Amitabh Bachchan
+Rajinikanth
+Kamal Haasan
+Chiranjeevi
+Salman Khan
+Aamir Khan
+Akshay Kumar
+Hrithik Roshan
+Dilip Kumar
+Dev Anand
+Raj Kapoor
+Shammi Kapoor
+Rishi Kapoor
+Dharmendra
+Jeetendra
+Vinod Khanna
+Anil Kapoor
+Govinda
+Sanjay Dutt
+Ajay Devgn
+Sunny Deol
+Naseeruddin Shah
+Om Puri
+Irrfan Khan
+Manoj Bajpayee
+Pankaj Tripathi
+Nawazuddin Siddiqui
+Prabhas
+Allu Arjun
+Ram Charan
+Jr. NTR
+Pawan Kalyan
+Vijay Thalapathy
+Ajith Kumar
+Mammootty
+Mohanlal
+Yash (K.G.F.)
+Dhanush
+Suriya
+Rajesh Khanna
+Rekha
+Hema Malini
+Waheeda Rehman
+Madhubala
+Meena Kumari
+Sridevi
+Madhuri Dixit
+Juhi Chawla
+Karisma Kapoor
+Kareena Kapoor
+Kajol
+Rani Mukerji
+Preity Zinta
+Aishwarya Rai Bachchan
+Sushmita Sen
+Priyanka Chopra
+Deepika Padukone
+Katrina Kaif
+Anushka Sharma
+Alia Bhatt
+Kangana Ranaut
+Vidya Balan
+Tabu
+Samantha Ruth Prabhu
+Nayanthara
+Rashmika Mandanna
+Sai Pallavi
+Lata Mangeshkar
+Asha Bhosle
+Kishore Kumar
+Mohammed Rafi
+Mukesh
+Hemant Kumar
+Talat Mahmood
+Jagjit Singh
+Pankaj Udhas
+Sonu Nigam
+Udit Narayan
+Kumar Sanu
+Alka Yagnik
+Shreya Ghoshal
+Arijit Singh
+Sunidhi Chauhan
+A. R. Rahman
+Ilaiyaraaja
+R. D. Burman
+S. D. Burman
+Salim–Sulaiman
+Vishal–Shekhar
+Pritam
+Sachin Tendulkar
+Kapil Dev
+Sunil Gavaskar
+Rahul Dravid
+Sourav Ganguly
+VVS Laxman
+Anil Kumble
+Virender Sehwag
+MS Dhoni
+Virat Kohli
+Rohit Sharma
+Yuvraj Singh
+Zaheer Khan
+Harbhajan Singh
+Jasprit Bumrah
+Ravindra Jadeja
