@@ -122,9 +122,27 @@ if not bio_text:
 hook_prompt = f"Write one very short, punchy opening HOOK in Hindi (1 line) for a short about {topic}."
 hook = llm_generate(hook_prompt).splitlines()[0][:80]
 
-# Title
-title_prompt = f"Create a clickable YouTube Shorts title in Hindi for {topic}. Keep under 55 characters."
-title = llm_generate(title_prompt).splitlines()[0][:55]
+def generate_title(topic):
+    title_prompt = f"Suggest a viral YouTube Shorts title under 55 characters for a motivational biography about {topic} in Hindi. Output only the title, no explanation."
+    resp = gemini_model.generate_content(title_prompt)
+    raw_title = resp.text.strip()
+
+    # Clean extra formatting
+    lines = [line.strip("-•: ") for line in raw_title.splitlines() if line.strip()]
+    if not lines:
+        return f"Life of {topic} ❤️ #Shorts"
+
+    title = lines[0]
+
+    # Ensure max 55 chars
+    if len(title) > 55:
+        title = title[:52] + "..."
+
+    return title
+
+# Generate viral title
+video_title = generate_title(topic)
+print(f"🎬 Generated title: {video_title}")
 
 # Description + CTA + hashtags
 desc_prompt = (
