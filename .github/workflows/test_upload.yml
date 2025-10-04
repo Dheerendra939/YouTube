@@ -1,6 +1,6 @@
 name: Auto YouTube Shorts Generator
 
-on:
+off:
   schedule:
     # 15 daily upload times (converted to UTC)
     - cron: "1 1 * * *"   # 06:30 IST
@@ -10,10 +10,6 @@ on:
     - cron: "0 4 * * *"   # 10:30 IST
     - cron: "30 4 * * *"  # 11:30 IST
     - cron: "0 5 * * *"   # 12:30 IST
-    - cron: "30 8 * * *"  # 14:00 IST
-    - cron: "30 9 * * *"  # 15:00 IST
-    - cron: "30 10 * * *" # 16:00 IST
-    - cron: "30 11 * * *" # 17:00 IST
     - cron: "30 12 * * *" # 18:00 IST
     - cron: "30 13 * * *" # 19:00 IST
     - cron: "30 14 * * *" # 20:00 IST
