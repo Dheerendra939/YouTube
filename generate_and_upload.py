@@ -272,58 +272,61 @@ frames_total = int(round(audio_seconds * FPS))
 print(f"🎧 Narration length: {audio_seconds:.2f}s, frames: {frames_total}")
 
 # -----------------------------
-# Step 4: Create video (zoom effect, double time per image but match narration)
+# Step 4: Create Video with zoom effect (safe mode)
 # -----------------------------
-print("🎬 Creating video (zoom effect) ...")
+print("🎬 Creating video with zoom effect matching narration length...")
+
 video = cv2.VideoWriter(VIDEO_FILENAME, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
 
-# We'll use fewer images if narration is short: compute frames per image so we finish exactly on narration.
-# We double the base image display time as requested: base_frames = frames_total // len(images)
-base_frames = max(1, frames_total // len(images))
-frames_per_image = base_frames * 2
-
-# But we must ensure total frames == frames_total: adjust frames_per_image (distribute remainder)
-total_frames_needed = frames_total
+frames_per_image = max(1, frames_total // len(images))
+frames_per_image *= 2
+total_needed_frames = frames_total
 frames_generated = 0
-remaining_images = len(images)
 
-for idx, img_file in enumerate(images):
-    # compute frames for this image (distribute remainder so sum == total_frames_needed)
-    frames_for_this = min(frames_per_image, total_frames_needed - frames_generated - (remaining_images - 1))
-    remaining_images -= 1
+valid_images = []
 
-    img_base = Image.open(img_file)
-    img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
+# 🔍 Filter out invalid images before starting
+for img_file in images:
+    try:
+        # Try opening each image
+        with Image.open(img_file) as test_img:
+            test_img.verify()  # quick validation
+        valid_images.append(img_file)
+    except Exception as e:
+        print(f"⚠️ Skipping corrupted image {img_file}: {e}")
 
-    # zoom animation for frames_for_this frames
-    for f in range(frames_for_this):
-        # use a gentle in-out zoom between 1.0 and 1.08
-        t = f / max(1, frames_for_this - 1)
-        zoom = 1.0 + 0.08 * (0.5 - 0.5 * math.cos(math.pi * t))  # ease-in-out
-        w = int(WIDTH * zoom)
-        h = int(HEIGHT * zoom)
-        img = img_base.resize((w, h), Image.LANCZOS)
-        left = (w - WIDTH) // 2
-        top = (h - HEIGHT) // 2
-        img_cropped = img.crop((left, top, left + WIDTH, top + HEIGHT)).convert("RGB")
-        frame = cv2.cvtColor(np.array(img_cropped), cv2.COLOR_RGB2BGR)
-        video.write(frame)
-        frames_generated += 1
-        if frames_generated >= total_frames_needed:
+if not valid_images:
+    raise Exception("❌ No valid images available to create video!")
+
+# 🔁 Use only valid images to create video
+for img_file in valid_images:
+    try:
+        img_base = Image.open(img_file)
+        img_base = crop_to_frame(img_base, WIDTH, HEIGHT)
+
+        for f in range(frames_per_image):
+            zoom = 1 + 0.10 * np.sin(np.pi * f / frames_per_image)
+            w, h = int(WIDTH * zoom), int(HEIGHT * zoom)
+            img = img_base.resize((w, h))
+            left = (w - WIDTH) // 2
+            top = (h - HEIGHT) // 2
+            img_cropped = img.crop((left, top, left + WIDTH, top + HEIGHT)).convert("RGB")
+
+            frame = cv2.cvtColor(np.array(img_cropped), cv2.COLOR_RGB2BGR)
+            video.write(frame)
+            frames_generated += 1
+            if frames_generated >= total_needed_frames:
+                break
+
+        if frames_generated >= total_needed_frames:
             break
-    if frames_generated >= total_frames_needed:
-        break
 
-# If not enough frames (rare), pad with last image
-while frames_generated < total_frames_needed:
-    last_img = Image.open(images[-1])
-    last_img = crop_to_frame(last_img, WIDTH, HEIGHT)
-    frame = cv2.cvtColor(np.array(last_img), cv2.COLOR_RGB2BGR)
-    video.write(frame)
-    frames_generated += 1
+    except Exception as e:
+        print(f"⚠️ Failed to process {img_file}: {e}")
+        continue
 
 video.release()
-print(f"✅ Video created: {VIDEO_FILENAME} (frames: {frames_generated})")
+print(f"✅ Video created successfully using {len(valid_images)} valid images!")
 
 # -----------------------------
 # Step 5: Add background music (mix)
