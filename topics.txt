@@ -1,10 +1,5 @@
-Shah Rukh Khan
-Amitabh Bachchan
 Rajinikanth
 Kamal Haasan
-Chiranjeevi
-Salman Khan
-Aamir Khan
 Akshay Kumar
 Hrithik Roshan
 Dilip Kumar
@@ -12,18 +7,14 @@ Dev Anand
 Raj Kapoor
 Shammi Kapoor
 Rishi Kapoor
-Dharmendra
 Jeetendra
 Vinod Khanna
 Anil Kapoor
-Govinda
 Sanjay Dutt
 Ajay Devgn
 Sunny Deol
 Naseeruddin Shah
 Om Puri
-Irrfan Khan
-Manoj Bajpayee
 Pankaj Tripathi
 Nawazuddin Siddiqui
 Prabhas
@@ -33,9 +24,7 @@ Jr. NTR
 Pawan Kalyan
 Vijay Thalapathy
 Ajith Kumar
-Mammootty
 Mohanlal
-Yash (K.G.F.)
 Dhanush
 Suriya
 Rajesh Khanna
@@ -51,14 +40,10 @@ Karisma Kapoor
 Kareena Kapoor
 Kajol
 Rani Mukerji
-Preity Zinta
 Aishwarya Rai Bachchan
 Sushmita Sen
 Priyanka Chopra
-Deepika Padukone
 Katrina Kaif
-Anushka Sharma
-Alia Bhatt
 Kangana Ranaut
 Vidya Balan
 Tabu
@@ -70,7 +55,6 @@ Lata Mangeshkar
 Asha Bhosle
 Kishore Kumar
 Mohammed Rafi
-Mukesh
 Hemant Kumar
 Talat Mahmood
 Jagjit Singh
@@ -98,7 +82,6 @@ VVS Laxman
 Anil Kumble
 Virender Sehwag
 MS Dhoni
-Virat Kohli
 Rohit Sharma
 Yuvraj Singh
 Zaheer Khan
